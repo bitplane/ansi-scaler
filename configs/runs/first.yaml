@@ -16,9 +16,16 @@ sana:
   inference_steps: 24
   device: cuda
 rembg:
-  model: isnet-anime
-  sha256: f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99
-  model_path: ~/.u2net/isnet-anime.onnx
+  model: birefnet-general
+  sha256: 58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c
+  model_path: ~/.u2net/birefnet-general.onnx
+vlm:
+  model: qwen3-vl:8b
+  endpoint: http://127.0.0.1:11434
+  prompt_version: cutout-classifier-v1
+  temperature: 0.0
+  timeout_seconds: 300
+  keep_alive: 10m
 lod:
   levels:
     - name: lod-1
@@ -51,4 +58,3 @@ lod:
       length_threshold: 12.0
       corner_threshold: 50
       splice_threshold: 35
-

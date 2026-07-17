@@ -1,5 +1,5 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
-	catalog prompts generate rembg lod corpus smoke
+	catalog prompts generate rembg lod classify corpus smoke
 
 RUN_CONFIG ?= configs/runs/first.yaml
 
@@ -39,11 +39,14 @@ prompts: .venv/.installed  ## Build a deterministic prompt manifest
 generate: .venv/.installed  ## Generate Sana rasters (downloads model; CUDA required)
 	scripts/generate.sh $(RUN_CONFIG)
 
-rembg: .venv/.installed  ## Remove raster backgrounds with isnet-anime
+rembg: .venv/.installed  ## Remove raster backgrounds with the configured model
 	scripts/rembg.sh $(RUN_CONFIG)
 
 lod: .venv/.installed  ## Build SVG LODs and PNG previews with VTracer
 	scripts/lod.sh $(RUN_CONFIG)
+
+classify: .venv/.installed  ## Classify cutouts with the configured Ollama VLM
+	scripts/classify.sh $(RUN_CONFIG)
 
 corpus: .venv/.installed  ## Resume the configured corpus through the LOD stage
 	scripts/corpus.sh $(RUN_CONFIG)

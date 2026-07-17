@@ -6,6 +6,7 @@ from PIL import Image
 from ansi_scaler.config import load_run_config
 from ansi_scaler.manifests import read_jsonl, write_jsonl
 from ansi_scaler.stages.generate import run_generate
+from ansi_scaler.stages.classify import run_classify
 from ansi_scaler.stages.lod import run_lod
 from ansi_scaler.stages.rembg import run_rembg
 
@@ -43,6 +44,20 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
 
     assert run_rembg(config, session=object(), remove_function=fake_remove) == (1, 0, 0)
     assert run_lod(config) == (1, 0, 0)
+
+    def fake_vlm(_: dict) -> dict:
+        return {
+            "message": {
+                "content": """{"description":"a green object","primary_object":"object","object_count":1,
+                "multiple_candidate_assets":false,"visually_coherent":true,"artifact_flags":[],"uncertainty":0.1}"""
+            },
+            "eval_duration": 1,
+            "total_duration": 2,
+        }
+
+    assert run_classify(config, request_function=fake_vlm) == (1, 0, 0)
+    classification = next(read_jsonl(config.manifest_dir / "classifications.jsonl"))
+    assert classification["classification"]["primary_object"] == "object"
 
     record = next(read_jsonl(config.manifest_dir / "lods.jsonl"))
     assert [level["name"] for level in record["levels"]] == ["lod-1", "lod-2", "lod-3"]

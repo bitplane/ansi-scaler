@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -8,6 +9,7 @@ import typer
 from ansi_scaler.catalog import load_catalog
 from ansi_scaler.config import RunConfig, load_run_config
 from ansi_scaler.prompts import write_prompt_manifest
+from ansi_scaler.stages.classify import run_classify
 from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.lod import run_lod
 from ansi_scaler.stages.rembg import run_rembg
@@ -23,7 +25,10 @@ RunConfigOption = Annotated[Path, typer.Option("--run-config", exists=True, dir_
 
 
 def _config(path: Path) -> RunConfig:
-    return load_run_config(path)
+    config = load_run_config(path)
+    if ollama_host := os.environ.get("OLLAMA_HOST"):
+        config.vlm.endpoint = ollama_host
+    return config
 
 
 def _result(stage: str, result: tuple[int, int, int]) -> None:
@@ -84,6 +89,27 @@ def lod(
 ) -> None:
     """Generate canonical SVG LODs and small PNG previews."""
     _result("lod", run_lod(_config(run_config), limit=limit, force=force, retry_errors=retry_errors))
+
+
+@app.command("classify")
+def classify(
+    run_config: RunConfigOption,
+    limit: Annotated[int | None, typer.Option(min=1)] = None,
+    artifact_ids: Annotated[list[str] | None, typer.Option("--artifact-id")] = None,
+    force: bool = False,
+    retry_errors: bool = False,
+) -> None:
+    """Describe cutouts with the configured local vision-language model."""
+    _result(
+        "classify",
+        run_classify(
+            _config(run_config),
+            limit=limit,
+            artifact_ids=set(artifact_ids or []),
+            force=force,
+            retry_errors=retry_errors,
+        ),
+    )
 
 
 @app.command("run")
