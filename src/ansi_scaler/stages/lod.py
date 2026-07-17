@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import cairosvg
+import psutil
 import vtracer
 
 from ansi_scaler.artifacts import artifact_path, atomic_destination
@@ -11,7 +12,19 @@ from ansi_scaler.config import LodLevel, RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl, relative_path, resolve_path
 from ansi_scaler.reports import contact_sheet
-from ansi_scaler.runner import run_stage
+from ansi_scaler.runner import run_parallel_stage
+
+
+def lod_worker_count(config: RunConfig) -> int:
+    resources = config.resources
+    cpu_count = psutil.cpu_count(logical=True) or 1
+    if resources.lod_workers is not None:
+        return min(cpu_count, resources.lod_workers)
+    memory = psutil.virtual_memory()
+    reserved = int(memory.total * resources.memory_headroom)
+    usable = max(0, memory.available - reserved)
+    per_worker = resources.lod_worker_memory_mb * 1024 * 1024
+    return max(1, min(cpu_count, usable // per_worker))
 
 
 class LodGenerator:
@@ -85,15 +98,18 @@ def run_lod(
 ) -> tuple[int, int, int]:
     processor = LodGenerator(config, force=force)
     output = config.manifest_dir / "lods.jsonl"
-    result = run_stage(
+    workers = lod_worker_count(config)
+    result = run_parallel_stage(
         read_jsonl(config.manifest_dir / "cutouts.jsonl"),
         output,
         config.manifest_dir / "lods.errors.jsonl",
         processor,
         processor.output_id,
+        workers=workers,
         limit=limit or config.limit,
         force=force,
         retry_errors=retry_errors,
+        stage_name=f"lod ({workers} workers)",
     )
     previews = [
         resolve_path(level["preview"], config.data_dir) for record in read_jsonl(output) for level in record["levels"]

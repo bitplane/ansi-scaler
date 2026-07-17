@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 from typing import Any
 
 from PIL import Image
@@ -16,7 +17,18 @@ class SanaGenerator:
     def __init__(self, config: RunConfig, pipeline: Any | None = None, *, force: bool = False) -> None:
         self.config = config
         self.settings = config.sana
-        if pipeline is None:
+        self.pipeline = pipeline
+        self.force = force
+        if self.pipeline is not None:
+            self._configure_pipeline()
+
+    def _configure_pipeline(self) -> None:
+        configure = getattr(self.pipeline, "set_progress_bar_config", None)
+        if callable(configure):
+            configure(disable=True)
+
+    def _load_pipeline(self) -> Any:
+        if self.pipeline is None:
             import torch
             from diffusers import SanaPipeline
 
@@ -26,14 +38,23 @@ class SanaGenerator:
                 dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
             else:
                 dtype = torch.float32
-            pipeline = SanaPipeline.from_pretrained(
+            self.pipeline = SanaPipeline.from_pretrained(
                 self.settings.model_id,
                 revision=self.settings.revision,
                 torch_dtype=dtype,
             )
-            pipeline.to(self.settings.device)
-        self.pipeline = pipeline
-        self.force = force
+            self.pipeline.to(self.settings.device)
+            self._configure_pipeline()
+        return self.pipeline
+
+    def close(self) -> None:
+        had_pipeline = self.pipeline is not None
+        self.pipeline = None
+        gc.collect()
+        if had_pipeline and self.settings.device == "cuda":
+            import torch
+
+            torch.cuda.empty_cache()
 
     def output_id(self, source: dict[str, Any]) -> str:
         return stable_id("sana-v1", source["id"], self.settings.model_dump(mode="json"))
@@ -47,7 +68,7 @@ class SanaGenerator:
             destination.unlink(missing_ok=True)
         if not destination.exists():
             generator = torch.Generator(device=self.settings.device).manual_seed(source["seed"])
-            image: Image.Image = self.pipeline(
+            image: Image.Image = self._load_pipeline()(
                 prompt=source["prompt"],
                 negative_prompt=source["negative_prompt"],
                 height=self.settings.height,
@@ -89,6 +110,7 @@ def run_generate(
         limit=limit or config.limit,
         force=force,
         retry_errors=retry_errors,
+        stage_name="generate",
     )
     paths = [resolve_path(record["artifact"], config.data_dir) for record in read_jsonl(output)]
     contact_sheet(paths[:100], config.run_dir / "reports" / "rasters.png")

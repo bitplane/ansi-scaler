@@ -47,6 +47,12 @@ class LodSettings(BaseModel):
     levels: list[LodLevel]
 
 
+class ResourceSettings(BaseModel):
+    memory_headroom: float = Field(default=0.2, ge=0.0, lt=1.0)
+    lod_worker_memory_mb: int = Field(default=256, ge=1)
+    lod_workers: int | None = Field(default=None, ge=1)
+
+
 class RunConfig(BaseModel):
     name: str
     catalog_dir: Path = Path("catalog")
@@ -56,6 +62,7 @@ class RunConfig(BaseModel):
     sana: SanaSettings = SanaSettings()
     rembg: RembgSettings = RembgSettings()
     lod: LodSettings
+    resources: ResourceSettings = ResourceSettings()
 
     @property
     def run_dir(self) -> Path:
