@@ -1,0 +1,27 @@
+name: smoke
+catalog_dir: catalog
+data_dir: data
+limit: 10
+prompts:
+  template_config: configs/prompts/objects.yaml
+  variants_per_entry: 5
+  seeds_per_prompt: 2
+  base_seed: 52000
+sana:
+  model_id: Efficient-Large-Model/Sana_600M_512px_diffusers
+  revision: 2defc07f5fb66d0c53ace051585e9a2cb83f8c15
+  width: 512
+  height: 512
+  guidance_scale: 5.0
+  inference_steps: 24
+  device: cuda
+rembg:
+  model: isnet-anime
+  sha256: f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99
+  model_path: ~/.u2net/isnet-anime.onnx
+lod:
+  levels:
+    - {name: lod-1, preview_size: 128, min_cells: 40, max_cells: 79, filter_speckle: 4, color_precision: 6, layer_difference: 8, length_threshold: 5.0, corner_threshold: 60, splice_threshold: 45}
+    - {name: lod-2, preview_size: 64, min_cells: 10, max_cells: 39, filter_speckle: 12, color_precision: 5, layer_difference: 16, length_threshold: 8.0, corner_threshold: 55, splice_threshold: 40}
+    - {name: lod-3, preview_size: 32, min_cells: 0, max_cells: 9, filter_speckle: 32, color_precision: 4, layer_difference: 32, length_threshold: 12.0, corner_threshold: 50, splice_threshold: 35}
+

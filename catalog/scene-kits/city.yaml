@@ -1,0 +1,19 @@
+id: city
+name: City
+theme: {setting: prosperous_fantasy_city, materials: [brick, stone, iron], palette: rich_urban}
+contents:
+  structures: [townhouse, apartment, shopfront, tavern, guildhall, clocktower, city_gate]
+  infrastructure: [stone_bridge, sewer_grate]
+  fixtures:
+    - concept: street_lamp
+      variant: ornate cast-iron municipal street lamp
+    - bench
+    - fountain
+    - market_stall
+    - signpost
+    - monument
+  containers: [barrel, wooden_crate]
+  vehicles: [handcart, carriage]
+  characters: [city_guard, merchant, street_vendor]
+  creatures: [stray_cat, pigeon]
+

@@ -1,0 +1,112 @@
+concepts:
+  - {id: ancient_oak, name: ancient oak tree, role: vegetation}
+  - {id: young_tree, name: young deciduous tree, role: vegetation}
+  - {id: pine_tree, name: tall pine tree, role: vegetation}
+  - {id: fallen_log, name: moss-covered fallen log, role: vegetation}
+  - {id: tree_stump, name: old tree stump, role: vegetation}
+  - {id: fern, name: broad woodland fern, role: vegetation}
+  - {id: mushroom_cluster, name: cluster of woodland mushrooms, role: vegetation}
+  - {id: berry_bush, name: berry bush, role: vegetation}
+  - {id: wildflowers, name: patch of wildflowers, role: vegetation}
+  - {id: mossy_boulder, name: large mossy boulder, role: terrain}
+  - {id: small_rock, name: small weathered rock, role: terrain}
+  - {id: hollow_tree, name: hollow tree with a dark opening, role: structures}
+  - {id: woodland_shrine, name: small woodland shrine, role: structures}
+  - {id: rope_bridge, name: rustic rope bridge, role: infrastructure}
+  - {id: trail_sign, name: wooden trail sign, role: fixtures}
+  - {id: campfire, name: compact campfire, role: fixtures}
+  - {id: tent, name: small canvas adventurer tent, role: structures}
+  - {id: wooden_crate, name: wooden storage crate, role: containers}
+  - {id: lantern, name: portable metal lantern, role: fixtures}
+  - {id: hunter, name: woodland hunter, role: characters}
+  - {id: ranger, name: forest ranger, role: characters}
+  - {id: goblin_scout, name: goblin scout, role: characters}
+  - {id: wolf, name: gray woodland wolf, role: creatures}
+  - {id: deer, name: alert woodland deer, role: creatures}
+  - {id: cottage, name: cozy timber cottage, role: structures}
+  - {id: farmhouse, name: rustic farmhouse, role: structures}
+  - {id: inn, name: welcoming village inn, role: structures}
+  - {id: blacksmith_shop, name: village blacksmith shop, role: structures}
+  - {id: windmill, name: wooden village windmill, role: structures}
+  - {id: well, name: stone water well, role: fixtures}
+  - {id: stone_bridge, name: small arched stone bridge, role: infrastructure}
+  - {id: wooden_fence, name: section of wooden fence, role: infrastructure}
+  - {id: market_stall, name: covered market stall, role: fixtures}
+  - {id: village_sign, name: painted village sign, role: fixtures}
+  - {id: street_lamp, name: freestanding street lamp, role: fixtures}
+  - {id: hay_cart, name: wooden cart piled with hay, role: vehicles}
+  - {id: barrel, name: bound wooden barrel, role: containers}
+  - {id: sack, name: tied burlap sack, role: containers}
+  - {id: handcart, name: small two-wheeled handcart, role: vehicles}
+  - {id: water_trough, name: village water trough, role: fixtures}
+  - {id: scarecrow, name: patched field scarecrow, role: fixtures}
+  - {id: villager, name: friendly village resident, role: characters}
+  - {id: blacksmith, name: sturdy village blacksmith, role: characters}
+  - {id: merchant, name: travelling goods merchant, role: characters}
+  - {id: chicken, name: plump farm chicken, role: creatures}
+  - {id: pig, name: pink farm pig, role: creatures}
+  - {id: horse, name: calm working horse, role: creatures}
+  - {id: townhouse, name: narrow city townhouse, role: structures}
+  - {id: apartment, name: compact city apartment building, role: structures}
+  - {id: shopfront, name: colourful city shopfront, role: structures}
+  - {id: tavern, name: busy city tavern, role: structures}
+  - {id: guildhall, name: ornate merchant guildhall, role: structures}
+  - {id: clocktower, name: tall municipal clocktower, role: structures}
+  - {id: city_gate, name: fortified city gate, role: structures}
+  - {id: bench, name: public street bench, role: fixtures}
+  - {id: fountain, name: decorative stone fountain, role: fixtures}
+  - {id: signpost, name: multi-direction city signpost, role: fixtures}
+  - {id: carriage, name: enclosed horse carriage, role: vehicles}
+  - {id: city_guard, name: uniformed city guard, role: characters}
+  - {id: street_vendor, name: lively street vendor, role: characters}
+  - {id: stray_cat, name: scruffy stray cat, role: creatures}
+  - {id: pigeon, name: plump city pigeon, role: creatures}
+  - {id: sewer_grate, name: round iron sewer grate, role: infrastructure}
+  - {id: monument, name: small civic monument, role: fixtures}
+  - {id: keep, name: massive stone castle keep, role: structures}
+  - {id: gatehouse, name: fortified castle gatehouse, role: structures}
+  - {id: guard_tower, name: round castle guard tower, role: structures}
+  - {id: wall_section, name: section of castle curtain wall, role: structures}
+  - {id: battlement, name: crenellated battlement section, role: infrastructure}
+  - {id: drawbridge, name: heavy wooden drawbridge, role: infrastructure}
+  - {id: portcullis, name: iron castle portcullis, role: infrastructure}
+  - {id: throne, name: ornate royal throne, role: fixtures}
+  - {id: war_banner, name: hanging heraldic war banner, role: fixtures}
+  - {id: weapon_rack, name: castle weapon rack, role: fixtures}
+  - {id: armor_stand, name: full suit of armour on a stand, role: fixtures}
+  - {id: treasure_chest, name: reinforced treasure chest, role: containers}
+  - {id: brazier, name: burning iron brazier, role: fixtures}
+  - {id: chandelier, name: heavy medieval chandelier, role: fixtures}
+  - {id: ballista, name: castle ballista, role: vehicles}
+  - {id: catapult, name: compact siege catapult, role: vehicles}
+  - {id: knight, name: armoured castle knight, role: characters}
+  - {id: archer, name: castle archer, role: characters}
+  - {id: royal_guard, name: elite royal guard, role: characters}
+  - {id: king, name: crowned medieval king, role: characters}
+  - {id: warhorse, name: armoured warhorse, role: creatures}
+  - {id: raven, name: black castle raven, role: creatures}
+  - {id: gargoyle, name: crouching stone gargoyle, role: creatures}
+  - {id: terminal_building, name: futuristic spaceport terminal, role: structures}
+  - {id: control_tower, name: spaceport control tower, role: structures}
+  - {id: hangar, name: modular spacecraft hangar, role: structures}
+  - {id: landing_pad, name: marked spacecraft landing pad, role: infrastructure}
+  - {id: docking_gate, name: sealed docking gate, role: infrastructure}
+  - {id: cargo_conveyor, name: automated cargo conveyor, role: infrastructure}
+  - {id: security_barrier, name: illuminated security barrier, role: infrastructure}
+  - {id: floodlight, name: tall modular floodlight, role: fixtures}
+  - {id: warning_beacon, name: flashing warning beacon, role: fixtures}
+  - {id: cargo_container, name: rugged space cargo container, role: containers}
+  - {id: fuel_pump, name: spacecraft fuel pump, role: fixtures}
+  - {id: fuel_hose, name: coiled heavy fuel hose, role: tools}
+  - {id: maintenance_toolbox, name: futuristic maintenance toolbox, role: tools}
+  - {id: service_robot, name: compact spaceport service robot, role: characters}
+  - {id: vending_machine, name: glowing futuristic vending machine, role: fixtures}
+  - {id: shuttle, name: small passenger space shuttle, role: vehicles}
+  - {id: cargo_tug, name: compact spaceport cargo tug, role: vehicles}
+  - {id: hover_forklift, name: hovering cargo forklift, role: vehicles}
+  - {id: ground_crew, name: spaceport ground crew worker, role: characters}
+  - {id: pilot, name: confident shuttle pilot, role: characters}
+  - {id: security_officer, name: spaceport security officer, role: characters}
+  - {id: maintenance_drone, name: flying maintenance drone, role: creatures}
+  - {id: alien_traveler, name: friendly alien traveller, role: characters}
+  - {id: spaceport_sign, name: freestanding holographic spaceport sign, role: fixtures}

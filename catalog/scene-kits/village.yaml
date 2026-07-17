@@ -1,0 +1,19 @@
+id: village
+name: Village
+theme: {setting: pastoral_fantasy, materials: [timber, stone], palette: warm_earth}
+contents:
+  structures: [cottage, farmhouse, inn, blacksmith_shop, windmill]
+  fixtures:
+    - well
+    - market_stall
+    - village_sign
+    - concept: street_lamp
+      variant: crooked iron lantern on a wooden post
+    - water_trough
+    - scarecrow
+  infrastructure: [stone_bridge, wooden_fence]
+  vehicles: [hay_cart, handcart]
+  containers: [barrel, wooden_crate, sack]
+  characters: [villager, blacksmith, merchant]
+  creatures: [chicken, pig, horse]
+

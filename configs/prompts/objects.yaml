@@ -1,0 +1,17 @@
+style: >-
+  single isolated subject, fully visible with comfortable margin, centered,
+  polished cartoon game asset, strong readable silhouette, chunky simple shapes,
+  clean crisp edges, vibrant controlled color palette, flat light-gray studio
+  background, even soft lighting, minimal contact shadow, no scenery, no
+  surrounding props, no border, no frame, no text, no logo
+negative_prompt: >-
+  multiple subjects, duplicate object, cropped, cut off, complex background,
+  landscape, room, scenery, pedestal, decorative border, text, letters, logo,
+  watermark, photorealistic
+templates:
+  - "{subject}, front three-quarter view, {style}"
+  - "{subject}, slightly elevated three-quarter view, {style}"
+  - "{subject}, clear game inventory presentation, {style}"
+  - "{subject}, bold icon-like composition while retaining physical form, {style}"
+  - "{subject}, characterful hand-painted game illustration, {style}"
+

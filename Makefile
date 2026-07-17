@@ -1,0 +1,64 @@
+.PHONY: help all install dev lock upgrade test coverage lint format clean \
+	catalog prompts generate rembg lod corpus smoke
+
+RUN_CONFIG ?= configs/runs/first.yaml
+
+all: dev test lint  ## Prepare the project and run all local checks
+
+install: .venv/.installed  ## Create the locked runtime environment
+
+dev: .venv/.installed-dev  ## Create the locked development environment
+
+lock:  ## Refresh uv.lock without upgrading dependencies
+	uv lock
+
+upgrade:  ## Upgrade dependencies and refresh uv.lock
+	uv lock --upgrade
+
+test: .venv/.installed-dev  ## Run unit tests (no model downloads or GPU required)
+	scripts/test.sh
+
+coverage: .venv/.installed-dev  ## Run tests and build an HTML coverage report
+	scripts/coverage.sh
+
+lint: .venv/.installed-dev  ## Check formatting and lint Python code
+	scripts/lint.sh
+
+format: .venv/.installed-dev  ## Format and auto-fix Python code
+	scripts/format.sh
+
+clean:  ## Remove the venv and local caches, but never corpus data
+	scripts/clean.sh
+
+catalog: .venv/.installed  ## Validate the committed concept catalogue
+	scripts/catalog.sh $(RUN_CONFIG)
+
+prompts: .venv/.installed  ## Build a deterministic prompt manifest
+	scripts/prompts.sh $(RUN_CONFIG)
+
+generate: .venv/.installed  ## Generate Sana rasters (downloads model; CUDA required)
+	scripts/generate.sh $(RUN_CONFIG)
+
+rembg: .venv/.installed  ## Remove raster backgrounds with isnet-anime
+	scripts/rembg.sh $(RUN_CONFIG)
+
+lod: .venv/.installed  ## Build SVG LODs and PNG previews with VTracer
+	scripts/lod.sh $(RUN_CONFIG)
+
+corpus: .venv/.installed  ## Resume the configured corpus through the LOD stage
+	scripts/corpus.sh $(RUN_CONFIG)
+
+smoke: .venv/.installed  ## Run ten real samples through all stages (downloads models; CUDA required)
+	scripts/corpus.sh configs/runs/smoke.yaml
+
+.venv/.installed: pyproject.toml uv.lock .venv/.created scripts/install.sh
+	scripts/install.sh
+
+.venv/.installed-dev: pyproject.toml uv.lock .venv/.created scripts/install-dev.sh
+	scripts/install-dev.sh
+
+.venv/.created: .python-version scripts/venv.sh
+	scripts/venv.sh
+
+help:  ## Show this help
+	@awk 'BEGIN {FS = ":.*?## "}; /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)

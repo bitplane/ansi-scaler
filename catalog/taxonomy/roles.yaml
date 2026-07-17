@@ -1,0 +1,16 @@
+roles:
+  - terrain
+  - vegetation
+  - structures
+  - infrastructure
+  - fixtures
+  - props
+  - containers
+  - tools
+  - resources
+  - hazards
+  - characters
+  - creatures
+  - vehicles
+  - ambient_effects
+
