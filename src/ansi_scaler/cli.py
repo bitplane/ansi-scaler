@@ -171,12 +171,12 @@ def review(
 @app.command("run")
 def run_pipeline(
     run_config: RunConfigOption,
-    through: Annotated[str, typer.Option()] = "lod",
+    through: Annotated[str, typer.Option()] = "pyramid",
     force: bool = False,
     retry_errors: bool = False,
 ) -> None:
     """Run or resume the corpus pipeline through a named stage."""
-    stages = ["prompts", "generate", "rembg", "lod"]
+    stages = ["prompts", "generate", "rembg", "lod", "pyramid"]
     if through not in stages:
         raise typer.BadParameter(f"Expected one of: {', '.join(stages)}")
     config = _config(run_config)
@@ -191,3 +191,6 @@ def run_pipeline(
     if through == "rembg":
         return
     _result("lod", run_lod(config, force=force, retry_errors=retry_errors))
+    if through == "lod":
+        return
+    _result("pyramid", run_pyramid(config, force=force, retry_errors=retry_errors))

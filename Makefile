@@ -57,10 +57,10 @@ verify: .venv/.installed  ## Verify VLM classifications with the configured Olla
 review: .venv/.installed  ## Open the local corpus review and annotation UI
 	scripts/review.sh $(RUN_CONFIG)
 
-corpus: .venv/.installed  ## Resume the configured corpus through the LOD stage
+corpus: .venv/.installed .tools/.chuda-0.1.1  ## Resume the configured corpus through ANSI pyramids
 	scripts/corpus.sh $(RUN_CONFIG)
 
-smoke: .venv/.installed  ## Run ten real samples through all stages (downloads models; CUDA required)
+smoke: .venv/.installed .tools/.chuda-0.1.1  ## Run ten real samples through all stages (downloads models; CUDA required)
 	scripts/corpus.sh configs/runs/smoke.yaml
 
 .venv/.installed: pyproject.toml uv.lock .venv/.created scripts/install.sh

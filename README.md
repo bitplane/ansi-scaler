@@ -38,7 +38,7 @@ make smoke
 ```
 
 This downloads the pinned Sana and rembg models and requires a CUDA GPU. The
-initial 1,200-image run is resumable:
+initial 1,200-image run is resumable through compressed ANSI pyramids:
 
 ```bash
 make corpus

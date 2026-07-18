@@ -2,7 +2,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from PIL import Image
+from typer.testing import CliRunner
 
+from ansi_scaler import cli
 from ansi_scaler.config import load_run_config
 from ansi_scaler.manifests import read_jsonl, write_jsonl
 from ansi_scaler.stages.generate import run_generate
@@ -129,3 +131,24 @@ def test_pyramid_geometry_uses_alpha_bounds_and_padding(tmp_path: Path) -> None:
     assert geometry["content_bbox"] == [0.2, 0.125, 0.6, 0.625]
     assert geometry["render_bbox_px"] == [18, 8, 62, 52]
     assert geometry["render_bbox"] == [0.18, 0.1, 0.62, 0.65]
+
+
+def test_pipeline_can_run_through_pyramid(tmp_path: Path, monkeypatch) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    called = []
+    monkeypatch.setattr(cli, "load_run_config", lambda _: config)
+    monkeypatch.setattr(cli, "load_catalog", lambda _: object())
+    monkeypatch.setattr(cli, "write_prompt_manifest", lambda *_: called.append("prompts"))
+    monkeypatch.setattr(cli, "run_generate", lambda *_args, **_kwargs: called.append("generate") or (1, 0, 0))
+    monkeypatch.setattr(cli, "run_rembg", lambda *_args, **_kwargs: called.append("rembg") or (1, 0, 0))
+    monkeypatch.setattr(cli, "run_lod", lambda *_args, **_kwargs: called.append("lod") or (1, 0, 0))
+    monkeypatch.setattr(cli, "run_pyramid", lambda *_args, **_kwargs: called.append("pyramid") or (1, 0, 0))
+
+    result = CliRunner().invoke(
+        cli.app,
+        ["run", "--run-config", "configs/runs/smoke.yaml", "--through", "pyramid"],
+    )
+
+    assert result.exit_code == 0
+    assert called == ["prompts", "generate", "rembg", "lod", "pyramid"]
