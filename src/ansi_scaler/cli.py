@@ -150,6 +150,24 @@ def verify(
     )
 
 
+@app.command("review")
+def review(
+    run_config: RunConfigOption,
+    host: str | None = None,
+    port: Annotated[int | None, typer.Option(min=1, max=65535)] = None,
+) -> None:
+    """Serve the local corpus review interface."""
+    import uvicorn
+
+    from ansi_scaler.review.web import create_app
+
+    config = _config(run_config)
+    listen_host = host or config.review.host
+    listen_port = port or config.review.port
+    typer.echo(f"Review UI: http://{listen_host}:{listen_port}")
+    uvicorn.run(create_app(config), host=listen_host, port=listen_port, log_level="info")
+
+
 @app.command("run")
 def run_pipeline(
     run_config: RunConfigOption,

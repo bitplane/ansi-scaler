@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Review · ANSI Scaler{% endblock %}
+{% block topstat %}{{ queue_count }} awaiting review{% endblock %}
+{% block content %}
+{% if not sample %}
+<section class="empty-state">
+  <div class="empty-icon">✓</div>
+  <h1>Review queue complete</h1>
+  <p>There are no unreviewed active snapshots. New pipeline versions will appear automatically.</p>
+  <a class="button secondary" href="/grid">Browse corpus</a>
+</section>
+{% else %}
+<section class="review-shell" data-sample-id="{{ sample.sample_id }}" data-snapshot-id="{{ sample.snapshot_id }}" data-current-event="{{ sample.review.event_id if sample.review else '' }}" data-previous-sample="{{ previous_sample_id or '' }}" data-next-sample="{{ next_sample_id or '' }}">
+  <div class="sample-heading">
+    <div>
+      <div class="eyebrow">{{ sample.kit_id }} / {{ sample.role }} · {{ sample.sample_id[:10] }}</div>
+      <h1>{{ sample.concept_name }}</h1>
+      <p>{{ sample.prompt.prompt }}</p>
+    </div>
+    <div class="heading-badges">
+      {% if sample.conflict %}<span class="badge conflict">version conflict</span>{% endif %}
+      <span class="badge decision-{{ sample.machine_decision }}">{{ sample.machine_decision }}</span>
+    </div>
+  </div>
+
+  <div class="stage-rail">
+    {% if sample.raster %}<button data-image="/media/{{ sample.raster.id }}" data-label="Generated raster">Generated <kbd>B</kbd></button>{% endif %}
+    {% if sample.cutout %}<button class="selected" data-image="/media/{{ sample.cutout.id }}" data-label="rembg cutout">Cutout</button>{% endif %}
+    {% if sample.lod %}
+      {% for level in sample.lod.levels %}<button data-image="/media/{{ sample.lod.id }}?level={{ level.name }}" data-label="{{ level.name|upper }}">{{ level.name|upper }} <kbd>{{ loop.index }}</kbd></button>{% endfor %}
+    {% endif %}
+    <span class="stage-status {% if sample.pyramid %}ready{% endif %}">ANSI {% if sample.pyramid %}ready{% else %}pending{% endif %}</span>
+  </div>
+
+  <div class="inspection-grid">
+    <section class="image-panel checkerboard">
+      {% if sample.cutout %}<img id="review-image" src="/media/{{ sample.cutout.id }}" alt="Corpus sample">{% else %}<div class="missing">No cutout available</div>{% endif %}
+      <div id="image-label" class="image-label">rembg cutout</div>
+    </section>
+    <aside class="evidence-panel">
+      <section>
+        <div class="panel-label">Vision observation</div>
+        {% if sample.classification %}
+          <h2>{{ sample.classification.classification.primary_object }}</h2>
+          <p>{{ sample.classification.classification.description }}</p>
+          <div class="facts">
+            <span>{{ sample.classification.classification.object_count }} object{% if sample.classification.classification.object_count != 1 %}s{% endif %}</span>
+            <span>{{ (sample.classification.classification.uncertainty * 100)|round|int }}% uncertainty</span>
+          </div>
+          <small>{{ sample.classification.vlm_model }} · {{ sample.classification.vlm_prompt_version }}</small>
+        {% else %}<p class="muted">Classification not available.</p>{% endif %}
+      </section>
+      <section>
+        <div class="panel-label">Verifier</div>
+        {% if sample.verification %}
+          <h2 class="decision-text-{{ sample.machine_decision }}">{{ sample.machine_decision }}</h2>
+          <p>{{ sample.verification.verification.explanation }}</p>
+          <small>{{ sample.verification.llm_model }} · {{ sample.verification.llm_prompt_version }}</small>
+        {% else %}<p class="muted">Verification not available.</p>{% endif %}
+      </section>
+    </aside>
+  </div>
+
+  <section id="reject-panel" class="reject-panel hidden">
+    <div class="reject-header"><strong>Why should this be rejected?</strong><span>Choose one primary cause</span></div>
+    <div class="issue-grid">
+      {% for code, details in issues.items() %}
+      <button class="issue" data-issue="{{ code }}" data-default-stage="{{ details[1] }}"><span>{{ details[0] }}</span><small>{{ details[1] }}</small></button>
+      {% endfor %}
+    </div>
+    <div class="reject-footer">
+      <label>Introduced by
+        <select id="cause-stage">{% for stage in stages %}<option value="{{ stage }}">{{ stage }}</option>{% endfor %}</select>
+      </label>
+      <input id="review-notes" placeholder="Optional note">
+      <button id="commit-reject" class="button reject" disabled>Reject and next <kbd>Enter</kbd></button>
+    </div>
+  </section>
+
+  <div class="action-bar">
+    <button id="accept" class="action accept"><kbd>A</kbd><span>Accept</span></button>
+    <button id="reject" class="action reject"><kbd>X</kbd><span>Reject</span></button>
+    <button id="review" class="action defer"><kbd>?</kbd><span>Unsure</span></button>
+    {% if sample.review %}<button id="undo" class="action undo"><kbd>Z</kbd><span>Undo</span></button>{% endif %}
+    <span id="save-status"></span>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if sample %}<script src="{{ url_for('static', path='/review.js') }}"></script>{% endif %}{% endblock %}

@@ -1,5 +1,5 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
-	catalog prompts generate rembg lod pyramid classify verify corpus smoke
+	catalog prompts generate rembg lod pyramid classify verify review corpus smoke
 
 RUN_CONFIG ?= configs/runs/first.yaml
 
@@ -53,6 +53,9 @@ classify: .venv/.installed  ## Classify cutouts with the configured Ollama VLM
 
 verify: .venv/.installed  ## Verify VLM classifications with the configured Ollama LLM
 	scripts/verify.sh $(RUN_CONFIG)
+
+review: .venv/.installed  ## Open the local corpus review and annotation UI
+	scripts/review.sh $(RUN_CONFIG)
 
 corpus: .venv/.installed  ## Resume the configured corpus through the LOD stage
 	scripts/corpus.sh $(RUN_CONFIG)

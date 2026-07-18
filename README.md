@@ -77,3 +77,23 @@ training builder can later apply random placement and edge-crossing crops.
 The target builds the pinned Chuda 0.1.1 release from crates.io into `.tools/`;
 Chuda does not need to be installed globally. A Rust toolchain and `zstd` are
 the only system-level requirements for this stage.
+
+## Reviewing corpus quality
+
+Start the local review interface without CUDA or Ollama:
+
+```bash
+make review
+```
+
+Open `http://127.0.0.1:8765`. The review screen compares the generated raster,
+rembg cutout, and LOD previews alongside the VLM observation and verifier
+decision. Use `A` to accept, `X` to reject, `?` when unsure, `B` to toggle the
+source image, `1`–`3` for LODs, arrow keys to browse, and `Z` to undo.
+
+Pipeline manifests remain immutable. Human actions are appended to
+`data/runs/<run>/reviews/annotations.jsonl`; the neighbouring SQLite database is
+a disposable index and can be rebuilt. The default queue prioritises conflicts
+introduced by new resource versions, then randomly samples the least-reviewed
+kits, concepts, roles, and machine decisions. Set `ANSI_SCALER_REVIEWER` to
+override the reviewer name recorded in the log.

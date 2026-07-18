@@ -83,6 +83,36 @@ class ChudaSettings(BaseModel):
     crop_padding_fraction: float = Field(default=0.05, ge=0.0, le=1.0)
 
 
+class ReviewIssueSettings(BaseModel):
+    label: str
+    default_stage: str
+
+
+class ReviewSettings(BaseModel):
+    host: str = "127.0.0.1"
+    port: int = Field(default=8765, ge=1, le=65535)
+    refresh_seconds: float = Field(default=2.0, ge=0.25)
+    issues: dict[str, ReviewIssueSettings] = Field(
+        default_factory=lambda: {
+            "wrong_subject": ReviewIssueSettings(label="Wrong subject", default_stage="generate"),
+            "multiple_assets": ReviewIssueSettings(label="Multiple assets", default_stage="generate"),
+            "incoherent_geometry": ReviewIssueSettings(label="Incoherent geometry", default_stage="generate"),
+            "cropped_source": ReviewIssueSettings(label="Source is cropped", default_stage="generate"),
+            "missing_parts": ReviewIssueSettings(label="Missing parts", default_stage="rembg"),
+            "mostly_transparent": ReviewIssueSettings(label="Mostly transparent", default_stage="rembg"),
+            "residual_background": ReviewIssueSettings(label="Residual background", default_stage="rembg"),
+            "halo": ReviewIssueSettings(label="Background halo", default_stage="rembg"),
+            "stray_fragments": ReviewIssueSettings(label="Stray fragments", default_stage="rembg"),
+            "lod_detail_loss": ReviewIssueSettings(label="LOD damage", default_stage="lod"),
+            "ansi_render_failure": ReviewIssueSettings(label="ANSI damage", default_stage="pyramid"),
+            "prompt_problem": ReviewIssueSettings(label="Prompt problem", default_stage="prompt"),
+            "classifier_error": ReviewIssueSettings(label="VLM observation is wrong", default_stage="classify"),
+            "verifier_error": ReviewIssueSettings(label="Verifier decision is wrong", default_stage="verify"),
+            "other": ReviewIssueSettings(label="Other", default_stage="generate"),
+        }
+    )
+
+
 class RunConfig(BaseModel):
     name: str
     catalog_dir: Path = Path("catalog")
@@ -96,6 +126,7 @@ class RunConfig(BaseModel):
     vlm: VlmSettings = VlmSettings()
     llm: LlmSettings = LlmSettings()
     chuda: ChudaSettings = ChudaSettings()
+    review: ReviewSettings = ReviewSettings()
 
     @property
     def run_dir(self) -> Path:

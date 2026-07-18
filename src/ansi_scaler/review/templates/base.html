@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ANSI Scaler Review{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/review.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/review"><span class="brand-mark">▦</span> ANSI Scaler</a>
+    <nav>
+      <a class="{% if request.url.path == '/review' %}active{% endif %}" href="/review">Review</a>
+      <a class="{% if request.url.path == '/grid' %}active{% endif %}" href="/grid">Grid</a>
+      <a class="{% if request.url.path == '/metrics' %}active{% endif %}" href="/metrics">Metrics</a>
+    </nav>
+    <div class="top-stat">{% block topstat %}{% endblock %}</div>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -2,6 +2,10 @@ name: first
 catalog_dir: catalog
 data_dir: data
 limit: null
+review:
+  host: 127.0.0.1
+  port: 8765
+  refresh_seconds: 2.0
 prompts:
   template_config: configs/prompts/objects.yaml
   variants_per_entry: 5

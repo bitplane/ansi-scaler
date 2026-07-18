@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Corpus Grid · ANSI Scaler{% endblock %}
+{% block topstat %}{{ total }} matching samples{% endblock %}
+{% block content %}
+<section class="grid-page">
+  <form class="filters" method="get">
+    {% for key in ['kit_id', 'role', 'concept_id', 'machine_decision'] %}
+    <label>{{ key.replace('_', ' ') }}<select name="{{ key }}"><option value="">All</option>{% for value in options[key] %}<option value="{{ value }}" {% if filters.get(key) == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    {% endfor %}
+    <label>Status<select name="status"><option value="">All</option>{% for value in ['unreviewed','accept','reject','review'] %}<option value="{{ value }}" {% if filters.get('status') == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    <label>Conflict<select name="conflict"><option value="">All</option><option value="yes" {% if filters.get('conflict') == 'yes' %}selected{% endif %}>Changed/conflicting</option></select></label>
+    <button class="button secondary" type="submit">Apply</button>
+  </form>
+  <div class="card-grid">
+    {% for sample in samples %}
+    <a class="sample-card" href="/review?sample={{ sample.sample_id }}">
+      <div class="thumb checkerboard">{% if sample.cutout %}<img loading="lazy" src="/media/{{ sample.cutout.id }}" alt="{{ sample.concept_name }}">{% endif %}</div>
+      <div class="card-body"><strong>{{ sample.concept_name }}</strong><span>{{ sample.kit_id }} · {{ sample.role }}</span></div>
+      <div class="card-state">
+        {% if sample.review %}<span class="badge human-{{ sample.review.outcome }}">{{ sample.review.outcome }}</span>{% else %}<span class="badge">unreviewed</span>{% endif %}
+        <span class="badge decision-{{ sample.machine_decision }}">{{ sample.machine_decision }}</span>
+        {% if sample.conflict %}<span class="conflict-dot" title="Changed resource conflict"></span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  <div class="pagination">{% if page > 1 %}<a class="button secondary" href="?page={{ page - 1 }}">Previous</a>{% endif %}{% if has_next %}<a class="button secondary" href="?page={{ page + 1 }}">Next</a>{% endif %}</div>
+</section>
+{% endblock %}
