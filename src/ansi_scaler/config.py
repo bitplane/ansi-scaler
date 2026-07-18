@@ -62,6 +62,15 @@ class VlmSettings(BaseModel):
     keep_alive: str = "10m"
 
 
+class LlmSettings(BaseModel):
+    model: str = "qwen3:8b"
+    endpoint: str = "http://127.0.0.1:11434"
+    prompt_version: str = "corpus-verifier-v2"
+    temperature: float = Field(default=0.0, ge=0.0)
+    timeout_seconds: int = Field(default=300, ge=1)
+    keep_alive: str = "10m"
+
+
 class RunConfig(BaseModel):
     name: str
     catalog_dir: Path = Path("catalog")
@@ -73,6 +82,7 @@ class RunConfig(BaseModel):
     lod: LodSettings
     resources: ResourceSettings = ResourceSettings()
     vlm: VlmSettings = VlmSettings()
+    llm: LlmSettings = LlmSettings()
 
     @property
     def run_dir(self) -> Path:

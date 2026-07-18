@@ -9,6 +9,7 @@ from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.classify import run_classify
 from ansi_scaler.stages.lod import run_lod
 from ansi_scaler.stages.rembg import run_rembg
+from ansi_scaler.stages.verify import run_verify
 
 
 class FakePipeline:
@@ -28,6 +29,8 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
             {
                 "id": "prompt-request",
                 "stage": "prompts",
+                "concept_id": "green_object",
+                "concept_name": "green object",
                 "prompt": "a green object",
                 "negative_prompt": "background",
                 "seed": 1,
@@ -58,6 +61,20 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
     assert run_classify(config, request_function=fake_vlm) == (1, 0, 0)
     classification = next(read_jsonl(config.manifest_dir / "classifications.jsonl"))
     assert classification["classification"]["primary_object"] == "object"
+
+    def fake_llm(_: dict) -> dict:
+        return {
+            "message": {
+                "content": """{"semantic_match":true,"cardinality_match":true,"visually_usable":true,
+                "decision":"accept","rejection_reasons":[],"explanation":"The object matches.","uncertainty":0.1}"""
+            },
+            "eval_duration": 1,
+            "total_duration": 2,
+        }
+
+    assert run_verify(config, request_function=fake_llm) == (1, 0, 0)
+    verification = next(read_jsonl(config.manifest_dir / "verifications.jsonl"))
+    assert verification["verification"]["decision"] == "accept"
 
     record = next(read_jsonl(config.manifest_dir / "lods.jsonl"))
     assert [level["name"] for level in record["levels"]] == ["lod-1", "lod-2", "lod-3"]

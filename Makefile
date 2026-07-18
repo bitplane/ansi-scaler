@@ -1,5 +1,5 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
-	catalog prompts generate rembg lod classify corpus smoke
+	catalog prompts generate rembg lod classify verify corpus smoke
 
 RUN_CONFIG ?= configs/runs/first.yaml
 
@@ -47,6 +47,9 @@ lod: .venv/.installed  ## Build SVG LODs and PNG previews with VTracer
 
 classify: .venv/.installed  ## Classify cutouts with the configured Ollama VLM
 	scripts/classify.sh $(RUN_CONFIG)
+
+verify: .venv/.installed  ## Verify VLM classifications with the configured Ollama LLM
+	scripts/verify.sh $(RUN_CONFIG)
 
 corpus: .venv/.installed  ## Resume the configured corpus through the LOD stage
 	scripts/corpus.sh $(RUN_CONFIG)

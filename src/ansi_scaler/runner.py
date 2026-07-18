@@ -45,27 +45,30 @@ def run_stage(
     completed = known_ids(output_manifest)
     failed_parents = {record["parent_id"] for record in read_jsonl(error_manifest)} if not retry_errors else set()
     selected_inputs = list(islice(inputs, limit)) if limit is not None else list(inputs)
-    successes = failures = skipped = 0
+    pending = []
+    scheduled_ids = set(completed)
+    skipped = 0
+    for source in selected_inputs:
+        output_id = id_builder(source)
+        if output_id in scheduled_ids or source["id"] in failed_parents:
+            skipped += 1
+            continue
+        pending.append(source)
+        scheduled_ids.add(output_id)
+    successes = failures = 0
 
     progress = tqdm(
-        selected_inputs,
+        pending,
         desc=stage_name,
         unit="image",
         dynamic_ncols=True,
         disable=not show_progress,
     )
+    progress.set_postfix(completed=0, failed=0, skipped=skipped, refresh=False)
     try:
         for source in progress:
             parent_id = source["id"]
             output_id = id_builder(source)
-            if output_id in completed:
-                skipped += 1
-                progress.set_postfix(completed=successes, failed=failures, skipped=skipped, refresh=False)
-                continue
-            if parent_id in failed_parents:
-                skipped += 1
-                progress.set_postfix(completed=successes, failed=failures, skipped=skipped, refresh=False)
-                continue
             try:
                 result = processor(source)
                 if result["id"] != output_id:
@@ -118,13 +121,15 @@ def run_parallel_stage(
     failed_parents = {record["parent_id"] for record in read_jsonl(error_manifest)} if not retry_errors else set()
     selected = list(islice(inputs, limit)) if limit is not None else list(inputs)
     pending: list[tuple[dict[str, Any], str]] = []
+    scheduled_ids = set(completed)
     skipped = 0
     for source in selected:
         output_id = id_builder(source)
-        if output_id in completed or source["id"] in failed_parents:
+        if output_id in scheduled_ids or source["id"] in failed_parents:
             skipped += 1
         else:
             pending.append((source, output_id))
+            scheduled_ids.add(output_id)
 
     workers = min(workers, len(pending))
     if workers <= 1:
@@ -140,7 +145,8 @@ def run_parallel_stage(
         )
 
     successes = failures = 0
-    progress = tqdm(total=len(selected), initial=skipped, desc=stage_name, unit="image", dynamic_ncols=True)
+    progress = tqdm(total=len(pending), desc=stage_name, unit="image", dynamic_ncols=True)
+    progress.set_postfix(completed=0, failed=0, skipped=skipped, refresh=False)
     try:
         with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as executor:
             futures = {executor.submit(processor, source): (source, output_id) for source, output_id in pending}

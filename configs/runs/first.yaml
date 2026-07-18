@@ -26,6 +26,13 @@ vlm:
   temperature: 0.0
   timeout_seconds: 300
   keep_alive: 10m
+llm:
+  model: qwen3:8b
+  endpoint: http://127.0.0.1:11434
+  prompt_version: corpus-verifier-v2
+  temperature: 0.0
+  timeout_seconds: 300
+  keep_alive: 10m
 lod:
   levels:
     - name: lod-1

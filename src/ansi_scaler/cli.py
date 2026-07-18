@@ -13,6 +13,7 @@ from ansi_scaler.stages.classify import run_classify
 from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.lod import run_lod
 from ansi_scaler.stages.rembg import run_rembg
+from ansi_scaler.stages.verify import run_verify
 
 
 app = typer.Typer(help="Build reproducible synthetic ANSI-art training corpora.", no_args_is_help=True)
@@ -28,6 +29,7 @@ def _config(path: Path) -> RunConfig:
     config = load_run_config(path)
     if ollama_host := os.environ.get("OLLAMA_HOST"):
         config.vlm.endpoint = ollama_host
+        config.llm.endpoint = ollama_host
     return config
 
 
@@ -103,6 +105,27 @@ def classify(
     _result(
         "classify",
         run_classify(
+            _config(run_config),
+            limit=limit,
+            artifact_ids=set(artifact_ids or []),
+            force=force,
+            retry_errors=retry_errors,
+        ),
+    )
+
+
+@app.command("verify")
+def verify(
+    run_config: RunConfigOption,
+    limit: Annotated[int | None, typer.Option(min=1)] = None,
+    artifact_ids: Annotated[list[str] | None, typer.Option("--artifact-id")] = None,
+    force: bool = False,
+    retry_errors: bool = False,
+) -> None:
+    """Verify VLM observations against prompts with a text-only LLM."""
+    _result(
+        "verify",
+        run_verify(
             _config(run_config),
             limit=limit,
             artifact_ids=set(artifact_ids or []),
