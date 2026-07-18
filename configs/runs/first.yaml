@@ -33,6 +33,16 @@ llm:
   temperature: 0.0
   timeout_seconds: 300
   keep_alive: 10m
+chuda:
+  executable: .tools/bin/chuda
+  version: 0.1.1
+  min_width: 2
+  max_width: 120
+  lod_3_below: 10
+  lod_2_below: 40
+  lod_1_below: 80
+  alpha_bbox_threshold: 1
+  crop_padding_fraction: 0.05
 lod:
   levels:
     - name: lod-1

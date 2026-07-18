@@ -6,6 +6,7 @@ simplified image LODs:
 
 ```text
 scene-kit catalogue -> prompts -> Sana raster -> rembg cutout -> VTracer LODs
+                                                         -> Chuda ANSI pyramids
 ```
 
 ## Setup
@@ -65,3 +66,14 @@ PNG previews. Intended terminal-width selection is:
 80+ cells    original cutout
 ```
 
+`make pyramid` renders every integer terminal width from 2 through 120. Each
+source image becomes an independently resumable `.tar.zst` containing the ANSI
+levels and their hashes. The archive is the compact source corpus; a later
+training-set builder will decode it into model-native grids and transition pairs.
+Before rendering, the stage measures the original alpha bounds and consistently
+crops every aligned LOD to a lightly padded object viewport. Both the tight
+content bbox and render bbox are retained in original-canvas coordinates so the
+training builder can later apply random placement and edge-crossing crops.
+The target builds the pinned Chuda 0.1.1 release from crates.io into `.tools/`;
+Chuda does not need to be installed globally. A Rust toolchain and `zstd` are
+the only system-level requirements for this stage.

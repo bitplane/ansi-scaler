@@ -1,5 +1,5 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
-	catalog prompts generate rembg lod classify verify corpus smoke
+	catalog prompts generate rembg lod pyramid classify verify corpus smoke
 
 RUN_CONFIG ?= configs/runs/first.yaml
 
@@ -45,6 +45,9 @@ rembg: .venv/.installed  ## Remove raster backgrounds with the configured model
 lod: .venv/.installed  ## Build SVG LODs and PNG previews with VTracer
 	scripts/lod.sh $(RUN_CONFIG)
 
+pyramid: .venv/.installed .tools/.chuda-0.1.1  ## Build compressed ANSI pyramids with pinned Chuda
+	scripts/pyramid.sh $(RUN_CONFIG)
+
 classify: .venv/.installed  ## Classify cutouts with the configured Ollama VLM
 	scripts/classify.sh $(RUN_CONFIG)
 
@@ -62,6 +65,9 @@ smoke: .venv/.installed  ## Run ten real samples through all stages (downloads m
 
 .venv/.installed-dev: pyproject.toml uv.lock .venv/.created scripts/install-dev.sh
 	scripts/install-dev.sh
+
+.tools/.chuda-0.1.1: scripts/install-chuda.sh
+	scripts/install-chuda.sh 0.1.1
 
 .venv/.created: .python-version scripts/venv.sh
 	scripts/venv.sh

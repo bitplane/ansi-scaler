@@ -71,6 +71,18 @@ class LlmSettings(BaseModel):
     keep_alive: str = "10m"
 
 
+class ChudaSettings(BaseModel):
+    executable: str = ".tools/bin/chuda"
+    version: str = "0.1.1"
+    min_width: int = Field(default=2, ge=1)
+    max_width: int = Field(default=120, ge=1)
+    lod_3_below: int = Field(default=10, ge=1)
+    lod_2_below: int = Field(default=40, ge=1)
+    lod_1_below: int = Field(default=80, ge=1)
+    alpha_bbox_threshold: int = Field(default=1, ge=0, le=255)
+    crop_padding_fraction: float = Field(default=0.05, ge=0.0, le=1.0)
+
+
 class RunConfig(BaseModel):
     name: str
     catalog_dir: Path = Path("catalog")
@@ -83,6 +95,7 @@ class RunConfig(BaseModel):
     resources: ResourceSettings = ResourceSettings()
     vlm: VlmSettings = VlmSettings()
     llm: LlmSettings = LlmSettings()
+    chuda: ChudaSettings = ChudaSettings()
 
     @property
     def run_dir(self) -> Path:

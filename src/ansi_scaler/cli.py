@@ -12,6 +12,7 @@ from ansi_scaler.prompts import write_prompt_manifest
 from ansi_scaler.stages.classify import run_classify
 from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.lod import run_lod
+from ansi_scaler.stages.pyramid import run_pyramid
 from ansi_scaler.stages.rembg import run_rembg
 from ansi_scaler.stages.verify import run_verify
 
@@ -91,6 +92,20 @@ def lod(
 ) -> None:
     """Generate canonical SVG LODs and small PNG previews."""
     _result("lod", run_lod(_config(run_config), limit=limit, force=force, retry_errors=retry_errors))
+
+
+@app.command("pyramid")
+def pyramid(
+    run_config: RunConfigOption,
+    limit: Annotated[int | None, typer.Option(min=1)] = None,
+    force: bool = False,
+    retry_errors: bool = False,
+) -> None:
+    """Build compressed multi-scale ANSI pyramids with Chuda."""
+    _result(
+        "pyramid",
+        run_pyramid(_config(run_config), limit=limit, force=force, retry_errors=retry_errors),
+    )
 
 
 @app.command("classify")

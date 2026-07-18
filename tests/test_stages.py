@@ -8,6 +8,7 @@ from ansi_scaler.manifests import read_jsonl, write_jsonl
 from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.classify import run_classify
 from ansi_scaler.stages.lod import run_lod
+from ansi_scaler.stages.pyramid import object_geometry, pyramid_id, source_for_width
 from ansi_scaler.stages.rembg import run_rembg
 from ansi_scaler.stages.verify import run_verify
 
@@ -83,3 +84,48 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
         assert (config.data_dir / level["svg"]).exists()
         preview = Image.open(config.data_dir / level["preview"])
         assert preview.size == (level["preview_size"], level["preview_size"])
+
+
+def test_pyramid_selects_lod_source_by_width(tmp_path: Path) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path
+    record = {
+        "id": "lod-record",
+        "original": "original.png",
+        "levels": [
+            {"name": "lod-1", "preview": "lod-1.png"},
+            {"name": "lod-2", "preview": "lod-2.png"},
+            {"name": "lod-3", "preview": "lod-3.png"},
+        ],
+    }
+
+    assert source_for_width(record, 2, config) == ("lod-3", tmp_path / "lod-3.png")
+    assert source_for_width(record, 9, config) == ("lod-3", tmp_path / "lod-3.png")
+    assert source_for_width(record, 10, config) == ("lod-2", tmp_path / "lod-2.png")
+    assert source_for_width(record, 40, config) == ("lod-1", tmp_path / "lod-1.png")
+    assert source_for_width(record, 80, config) == ("original", tmp_path / "original.png")
+
+
+def test_pyramid_identity_includes_renderer_version() -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    record = {"id": "lod-record"}
+    first = pyramid_id(record, config)
+    config.chuda.version = "0.1.2"
+
+    assert pyramid_id(record, config) != first
+
+
+def test_pyramid_geometry_uses_alpha_bounds_and_padding(tmp_path: Path) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path
+    image = Image.new("RGBA", (100, 80), (0, 0, 0, 0))
+    image.paste((0, 255, 0, 255), (20, 10, 60, 50))
+    image.save(tmp_path / "cutout.png")
+
+    geometry = object_geometry({"original": "cutout.png"}, config)
+
+    assert geometry["canvas_size"] == [100, 80]
+    assert geometry["content_bbox_px"] == [20, 10, 60, 50]
+    assert geometry["content_bbox"] == [0.2, 0.125, 0.6, 0.625]
+    assert geometry["render_bbox_px"] == [18, 8, 62, 52]
+    assert geometry["render_bbox"] == [0.18, 0.1, 0.62, 0.65]

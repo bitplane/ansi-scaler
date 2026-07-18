@@ -8,4 +8,5 @@ htmlcov/
 data/
 dist/
 site/
-
+.env
+.tools/
