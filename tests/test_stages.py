@@ -10,7 +10,13 @@ from ansi_scaler.manifests import read_jsonl, write_jsonl
 from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.classify import run_classify
 from ansi_scaler.stages.lod import run_lod
-from ansi_scaler.stages.pyramid import object_geometry, pyramid_id, source_for_width
+from ansi_scaler.stages.pyramid import (
+    PYRAMID_FORMAT,
+    _prepare_record_inputs,
+    object_geometry,
+    pyramid_id,
+    source_for_width,
+)
 from ansi_scaler.stages.rembg import run_rembg
 from ansi_scaler.stages.verify import run_verify
 
@@ -95,16 +101,16 @@ def test_pyramid_selects_lod_source_by_width(tmp_path: Path) -> None:
         "id": "lod-record",
         "original": "original.png",
         "levels": [
-            {"name": "lod-1", "preview": "lod-1.png"},
-            {"name": "lod-2", "preview": "lod-2.png"},
-            {"name": "lod-3", "preview": "lod-3.png"},
+            {"name": "lod-1", "svg": "lod-1.svg", "preview": "lod-1.png"},
+            {"name": "lod-2", "svg": "lod-2.svg", "preview": "lod-2.png"},
+            {"name": "lod-3", "svg": "lod-3.svg", "preview": "lod-3.png"},
         ],
     }
 
-    assert source_for_width(record, 2, config) == ("lod-3", tmp_path / "lod-3.png")
-    assert source_for_width(record, 9, config) == ("lod-3", tmp_path / "lod-3.png")
-    assert source_for_width(record, 10, config) == ("lod-2", tmp_path / "lod-2.png")
-    assert source_for_width(record, 40, config) == ("lod-1", tmp_path / "lod-1.png")
+    assert source_for_width(record, 2, config) == ("lod-3", tmp_path / "lod-3.svg")
+    assert source_for_width(record, 9, config) == ("lod-3", tmp_path / "lod-3.svg")
+    assert source_for_width(record, 10, config) == ("lod-2", tmp_path / "lod-2.svg")
+    assert source_for_width(record, 40, config) == ("lod-1", tmp_path / "lod-1.svg")
     assert source_for_width(record, 80, config) == ("original", tmp_path / "original.png")
 
 
@@ -115,6 +121,7 @@ def test_pyramid_identity_includes_renderer_version() -> None:
     config.chuda.version = "0.1.2"
 
     assert pyramid_id(record, config) != first
+    assert PYRAMID_FORMAT == "ansi-scaler-pyramid-v2"
 
 
 def test_pyramid_geometry_uses_alpha_bounds_and_padding(tmp_path: Path) -> None:
@@ -130,7 +137,40 @@ def test_pyramid_geometry_uses_alpha_bounds_and_padding(tmp_path: Path) -> None:
     assert geometry["content_bbox_px"] == [20, 10, 60, 50]
     assert geometry["content_bbox"] == [0.2, 0.125, 0.6, 0.625]
     assert geometry["render_bbox_px"] == [18, 8, 62, 52]
+    assert geometry["render_size_px"] == [44, 44]
     assert geometry["render_bbox"] == [0.18, 0.1, 0.62, 0.65]
+
+
+def test_pyramid_prepares_identically_sized_shared_crops(tmp_path: Path) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    config.run_dir.mkdir(parents=True)
+    original = config.data_dir / "original.png"
+    original.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGBA", (100, 80), (0, 0, 0, 0))
+    image.paste((0, 255, 0, 255), (20, 10, 60, 50))
+    image.save(original)
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80"><rect x="20" y="10" width="40" height="40" fill="green"/></svg>'
+    levels = []
+    for name in ("lod-1", "lod-2", "lod-3"):
+        path = config.data_dir / f"{name}.svg"
+        path.write_text(svg)
+        levels.append({"name": name, "svg": path.relative_to(config.data_dir).as_posix()})
+    record = {"id": "lod-record", "original": "original.png", "levels": levels}
+
+    output_id, geometry = _prepare_record_inputs(
+        record,
+        config,
+        str(config.run_dir),
+        ("lod-3", "lod-2", "lod-1", "original"),
+    )
+
+    assert geometry["render_bbox_px"] == [18, 8, 62, 52]
+    assert geometry["render_size_px"] == [44, 44]
+    for source_name in ("lod-3", "lod-2", "lod-1", "original"):
+        with Image.open(config.run_dir / "inputs" / source_name / f"{output_id}.png") as prepared:
+            assert prepared.size == (44, 44)
+            assert prepared.mode == "RGBA"
 
 
 def test_pipeline_can_run_through_pyramid(tmp_path: Path, monkeypatch) -> None:

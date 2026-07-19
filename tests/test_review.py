@@ -9,10 +9,11 @@ from PIL import Image
 import zstandard
 
 from ansi_scaler.config import RunConfig, load_run_config
-from ansi_scaler.manifests import write_jsonl
+from ansi_scaler.manifests import read_jsonl, write_jsonl
 from ansi_scaler.review.models import ReviewSubmission
 from ansi_scaler.review.service import ReviewService
 from ansi_scaler.review.web import create_app
+from ansi_scaler.stages.pyramid import PYRAMID_FORMAT
 
 
 def review_config(tmp_path: Path) -> RunConfig:
@@ -122,6 +123,7 @@ def add_pyramid(config: RunConfig) -> None:
                 "artifact": archive_path.relative_to(config.data_dir).as_posix(),
                 "archive_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
                 "chuda_version": config.chuda.version,
+                "pyramid_format": PYRAMID_FORMAT,
                 "pyramid_levels": [
                     {
                         "width": 40,
@@ -165,6 +167,20 @@ def test_review_lineage_annotation_and_metrics(tmp_path: Path) -> None:
     reopened.undo(event.event_id)
     assert reopened.samples()[0]["review"] is None
     reopened.close()
+
+
+def test_review_uses_current_pyramid_format(tmp_path: Path) -> None:
+    config = review_config(tmp_path)
+    add_pyramid(config)
+    manifest = config.manifest_dir / "pyramids.jsonl"
+    current = next(read_jsonl(manifest))
+    legacy = {**current, "id": "pyramid-v1", "pyramid_format": "ansi-scaler-pyramid-v1"}
+    write_jsonl(manifest, [current, legacy])
+
+    service = ReviewService(config)
+
+    assert service.samples()[0]["pyramid"]["id"] == "pyramid-1"
+    service.close()
 
 
 def test_changed_model_conflict_is_prioritised(tmp_path: Path) -> None:

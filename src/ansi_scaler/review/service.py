@@ -13,6 +13,7 @@ from ansi_scaler.manifests import resolve_path
 from ansi_scaler.review.ansi import PyramidCache, ansi_to_runs
 from ansi_scaler.review.models import ReviewEvent, ReviewSubmission
 from ansi_scaler.review.store import ReviewStore
+from ansi_scaler.stages.pyramid import PYRAMID_FORMAT
 
 
 def _last(records: list[dict[str, Any]], predicate: Any = None) -> dict[str, Any] | None:
@@ -59,7 +60,8 @@ class ReviewService:
             pyramid = (
                 _last(
                     children[(lod["id"], "pyramid")],
-                    lambda item: item.get("chuda_version") == self.config.chuda.version,
+                    lambda item: item.get("chuda_version") == self.config.chuda.version
+                    and item.get("pyramid_format") == PYRAMID_FORMAT,
                 )
                 if lod is not None
                 else None
