@@ -24,6 +24,7 @@ dependencies = [
     "typer>=0.16",
     "uvicorn>=0.35",
     "vtracer>=0.6.11",
+    "zstandard>=0.25",
 ]
 
 [project.scripts]

@@ -122,6 +122,14 @@ rembg cutout, and LOD previews alongside the VLM observation and verifier
 decision. Use `A` to accept, `X` to reject, `?` when unsure, `B` to toggle the
 source image, `1`–`3` for LODs, arrow keys to browse, and `Z` to undo.
 
+When an ANSI pyramid is available it is the default review surface. The scale
+slider selects real stored widths from 2–120; `[` and `]` move one level, and
+`P` plays the scale sequence. `Fit` centres each level inside the inspection frame,
+while `1:1` preserves 8×16 terminal cells and allows scrolling. The canvas renderer
+geometrically synthesizes block, braille, sextant, wedge, and legacy-bar glyphs so coloured cells
+remain seamless; ordinary text uses the bundled terminal-symbol font. The
+initial width is 40 and browser-local preferences persist between samples.
+
 Pipeline manifests remain immutable. Human actions are appended to
 `data/runs/<run>/reviews/annotations.jsonl`; the neighbouring SQLite database is
 a disposable index and can be rebuilt. The default queue prioritises conflicts

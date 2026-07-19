@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import tarfile
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query, Request
+import zstandard
+from fastapi import FastAPI, HTTPException, Path as ApiPath, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -16,6 +19,15 @@ from ansi_scaler.review.service import ReviewService
 
 
 PACKAGE_ROOT = Path(__file__).parent
+
+
+def _static_version() -> str:
+    digest = hashlib.sha256()
+    for path in sorted((PACKAGE_ROOT / "static").rglob("*")):
+        if path.is_file():
+            digest.update(path.relative_to(PACKAGE_ROOT / "static").as_posix().encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
 
 
 def create_app(config: RunConfig, *, service: ReviewService | None = None) -> FastAPI:
@@ -44,6 +56,7 @@ def create_app(config: RunConfig, *, service: ReviewService | None = None) -> Fa
     app.state.review_service = review_service
     app.mount("/static", StaticFiles(directory=PACKAGE_ROOT / "static"), name="static")
     templates = Jinja2Templates(directory=PACKAGE_ROOT / "templates")
+    templates.env.globals["static_version"] = _static_version()
 
     @app.get("/", include_in_schema=False)
     def home() -> RedirectResponse:
@@ -137,6 +150,15 @@ def create_app(config: RunConfig, *, service: ReviewService | None = None) -> Fa
         except KeyError as error:
             raise HTTPException(status_code=404, detail="Unknown artifact") from error
         return FileResponse(path)
+
+    @app.get("/api/pyramids/{record_id}/levels/{width}")
+    def pyramid_level(record_id: str, width: Annotated[int, ApiPath(ge=1)]) -> dict[str, object]:
+        try:
+            return review_service.pyramid_level(record_id, width)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Unknown pyramid level") from error
+        except (OSError, ValueError, tarfile.TarError, zstandard.ZstdError) as error:
+            raise HTTPException(status_code=500, detail=f"Pyramid archive is invalid: {error}") from error
 
     @app.post("/api/reviews")
     def submit_review(submission: ReviewSubmission) -> dict[str, str | None]:

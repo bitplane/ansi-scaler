@@ -10,6 +10,7 @@ from typing import Any
 from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import resolve_path
+from ansi_scaler.review.ansi import PyramidCache, ansi_to_runs
 from ansi_scaler.review.models import ReviewEvent, ReviewSubmission
 from ansi_scaler.review.store import ReviewStore
 
@@ -25,8 +26,10 @@ class ReviewService:
         self.store = store or ReviewStore(config)
         self.reviewer = os.environ.get("ANSI_SCALER_REVIEWER") or getpass.getuser()
         self._sample_cache: tuple[int, list[dict[str, Any]]] | None = None
+        self.pyramid_cache = PyramidCache()
 
     def close(self) -> None:
+        self.pyramid_cache.clear()
         self.store.close()
 
     def samples(self) -> list[dict[str, Any]]:
@@ -239,6 +242,25 @@ class ReviewService:
         if not path.is_relative_to(data_root) or not path.is_file():
             raise KeyError(record_id)
         return path
+
+    def pyramid_level(self, record_id: str, width: int) -> dict[str, Any]:
+        record = self.store.record(record_id)
+        if record is None or record.get("stage") != "pyramid":
+            raise KeyError(record_id)
+        level = next((item for item in record.get("pyramid_levels", []) if item.get("width") == width), None)
+        if level is None:
+            raise KeyError(f"{record_id}:{width}")
+        archive_path = resolve_path(record["artifact"], self.config.data_dir).resolve()
+        data_root = self.config.data_dir.resolve()
+        if not archive_path.is_relative_to(data_root) or not archive_path.is_file():
+            raise KeyError(record_id)
+        data = self.pyramid_cache.level(record, archive_path, width)
+        return {
+            "width": width,
+            "rows": level["rows"],
+            "source_lod": level["source_lod"],
+            **ansi_to_runs(data, width=width, rows=level["rows"]),
+        }
 
     def metrics(self) -> dict[str, Any]:
         samples = self.samples()

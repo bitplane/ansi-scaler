@@ -1,8 +1,12 @@
+import hashlib
+import io
 import json
+import tarfile
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 from PIL import Image
+import zstandard
 
 from ansi_scaler.config import RunConfig, load_run_config
 from ansi_scaler.manifests import write_jsonl
@@ -94,6 +98,45 @@ def verification(record_id: str, version: str, decision: str) -> dict:
     }
 
 
+def add_pyramid(config: RunConfig) -> None:
+    write_jsonl(
+        config.manifest_dir / "lods.jsonl",
+        [{"id": "lod-1", "parent_id": "cutout-1", "stage": "lod", "levels": [], "original": "unused.png"}],
+    )
+    data = b"\x1b[38;2;10;20;30;48;2;40;50;60m\xe2\x96\x83" + (b" " * 39) + b"\x1b[0m\n"
+    archive_path = config.artifact_dir / "pyramids" / "aa" / "pyramid.tar.zst"
+    archive_path.parent.mkdir(parents=True)
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
+        info = tarfile.TarInfo("levels/040.ansi")
+        info.size = len(data)
+        archive.addfile(info, io.BytesIO(data))
+    archive_path.write_bytes(zstandard.ZstdCompressor().compress(buffer.getvalue()))
+    write_jsonl(
+        config.manifest_dir / "pyramids.jsonl",
+        [
+            {
+                "id": "pyramid-1",
+                "parent_id": "lod-1",
+                "stage": "pyramid",
+                "artifact": archive_path.relative_to(config.data_dir).as_posix(),
+                "archive_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+                "chuda_version": config.chuda.version,
+                "pyramid_levels": [
+                    {
+                        "width": 40,
+                        "rows": 1,
+                        "source_lod": "lod-1",
+                        "bytes": len(data),
+                        "sha256": hashlib.sha256(data).hexdigest(),
+                        "path": "levels/040.ansi",
+                    }
+                ],
+            }
+        ],
+    )
+
+
 def test_review_lineage_annotation_and_metrics(tmp_path: Path) -> None:
     config = review_config(tmp_path)
     service = ReviewService(config)
@@ -153,11 +196,24 @@ def test_changed_model_conflict_is_prioritised(tmp_path: Path) -> None:
 
 def test_review_web_routes_and_safe_media(tmp_path: Path) -> None:
     config = review_config(tmp_path)
+    add_pyramid(config)
     service = ReviewService(config)
     app = create_app(config, service=service)
     sample = service.samples()[0]
     with TestClient(app) as client:
-        assert client.get("/review").status_code == 200
+        review_response = client.get("/review")
+        assert review_response.status_code == 200
+        assert 'id="ansi-stage" class="selected"' in review_response.text
+        assert 'id="ansi-width" type="range" min="40" max="40" value="40"' in review_response.text
+        assert "review.css?v=" in review_response.text
+        assert "review.js?v=" in review_response.text
+        ansi_response = client.get("/api/pyramids/pyramid-1/levels/40")
+        assert ansi_response.status_code == 200
+        assert ansi_response.json()["palette"] == [[10, 20, 30], [40, 50, 60]]
+        assert ansi_response.json()["runs"][0] == ["▃" + (" " * 39), 0, 1]
+        assert "html" not in ansi_response.json()
+        assert client.get("/api/pyramids/pyramid-1/levels/41").status_code == 404
+        assert client.get("/api/pyramids/cutout-1/levels/40").status_code == 404
         assert "wooden crate" in client.get("/grid").text
         assert client.get("/metrics").status_code == 200
         assert client.get("/media/cutout-1").headers["content-type"] == "image/png"
@@ -172,4 +228,15 @@ def test_review_web_routes_and_safe_media(tmp_path: Path) -> None:
         )
         assert response.status_code == 200
         assert response.json()["next_sample_id"] is None
+    service.close()
+
+
+def test_review_falls_back_to_cutout_without_pyramid(tmp_path: Path) -> None:
+    config = review_config(tmp_path)
+    service = ReviewService(config)
+    with TestClient(create_app(config, service=service)) as client:
+        response = client.get("/review")
+        assert response.status_code == 200
+        assert 'id="ansi-stage"' not in response.text
+        assert 'class="selected" data-image="/media/cutout-1"' in response.text
     service.close()
