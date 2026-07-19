@@ -80,6 +80,9 @@ Choose another recipe with `RUN_CONFIG=configs/runs/example.yaml`. Generated
 manifests, reports, and content-addressed artifacts live under ignored `data/`.
 Each stage records failures separately and skips completed output IDs when
 resumed.
+Ollama classification and verification requests retry transient connection,
+timeout, rate-limit, and server failures three times with exponential backoff.
+An exhausted request rejects only that item and the pipeline continues.
 
 ## Catalogue
 

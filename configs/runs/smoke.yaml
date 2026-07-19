@@ -34,6 +34,9 @@ vlm:
   temperature: 0.0
   timeout_seconds: 300
   keep_alive: 10m
+  retry_attempts: 4
+  retry_initial_seconds: 1.0
+  retry_max_seconds: 8.0
 llm:
   model: qwen3:8b
   endpoint: http://127.0.0.1:11434
@@ -41,6 +44,9 @@ llm:
   temperature: 0.0
   timeout_seconds: 300
   keep_alive: 10m
+  retry_attempts: 4
+  retry_initial_seconds: 1.0
+  retry_max_seconds: 8.0
 chuda:
   version: 0.2.3
   backend: auto

@@ -9,7 +9,7 @@ from ansi_scaler import cli
 from ansi_scaler.config import load_run_config
 from ansi_scaler.manifests import read_jsonl, write_jsonl
 from ansi_scaler.stages.generate import run_generate
-from ansi_scaler.stages.classify import run_classify
+from ansi_scaler.stages.classify import Classification, run_classify
 from ansi_scaler.stages.lod import run_lod
 from ansi_scaler.stages.pyramid import (
     PYRAMID_FORMAT,
@@ -97,6 +97,49 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
         assert (config.data_dir / level["svg"]).exists()
         preview = Image.open(config.data_dir / level["preview"])
         assert preview.size == (level["preview_size"], level["preview_size"])
+
+
+def test_classify_continues_after_ollama_retries_are_exhausted(tmp_path: Path) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    config.limit = None
+    config.vlm.retry_attempts = 4
+    config.vlm.retry_initial_seconds = 0
+    config.manifest_dir.mkdir(parents=True)
+    records = []
+    for index in range(2):
+        artifact = config.data_dir / f"cutout-{index}.png"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGBA", (16, 16), (20, 40, 60, 255)).save(artifact)
+        records.append({"id": f"cutout-{index}", "stage": "rembg", "artifact": artifact.name})
+    write_jsonl(config.manifest_dir / "cutouts.jsonl", records)
+    calls = 0
+
+    def flaky_vlm(_: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls <= config.vlm.retry_attempts:
+            raise ConnectionError("Ollama restarted")
+        return {
+            "message": {
+                "content": Classification(
+                    description="object",
+                    primary_object="object",
+                    object_count=1,
+                    multiple_candidate_assets=False,
+                    visually_coherent=True,
+                    artifact_flags=[],
+                    uncertainty=0.0,
+                ).model_dump_json()
+            }
+        }
+
+    assert run_classify(config, request_function=flaky_vlm) == (1, 1, 0)
+    assert calls == 5
+    assert [item["parent_id"] for item in read_jsonl(config.manifest_dir / "classifications.errors.jsonl")] == [
+        "cutout-0"
+    ]
+    assert [item["parent_id"] for item in read_jsonl(config.manifest_dir / "classifications.jsonl")] == ["cutout-1"]
 
 
 def test_pyramid_selects_lod_source_by_width(tmp_path: Path) -> None:

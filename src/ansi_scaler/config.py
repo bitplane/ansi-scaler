@@ -62,6 +62,9 @@ class VlmSettings(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0)
     timeout_seconds: int = Field(default=300, ge=1)
     keep_alive: str = "10m"
+    retry_attempts: int = Field(default=4, ge=1)
+    retry_initial_seconds: float = Field(default=1.0, ge=0.0)
+    retry_max_seconds: float = Field(default=8.0, ge=0.0)
 
 
 class LlmSettings(BaseModel):
@@ -71,6 +74,9 @@ class LlmSettings(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0)
     timeout_seconds: int = Field(default=300, ge=1)
     keep_alive: str = "10m"
+    retry_attempts: int = Field(default=4, ge=1)
+    retry_initial_seconds: float = Field(default=1.0, ge=0.0)
+    retry_max_seconds: float = Field(default=8.0, ge=0.0)
 
 
 class ChudaSettings(BaseModel):

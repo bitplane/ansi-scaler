@@ -3,14 +3,15 @@ from __future__ import annotations
 import json
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl
-from ansi_scaler.runner import StageInfrastructureError, run_stage
+from ansi_scaler.runner import run_stage
+from ansi_scaler.stages.ollama import RequestFunction, request_with_retry
 
 
 VERIFIER_PROMPT = """You are a conservative quality gate for a synthetic game-art corpus.
@@ -29,9 +30,6 @@ class Verification(BaseModel):
     rejection_reasons: list[str]
     explanation: str
     uncertainty: float = Field(ge=0.0, le=1.0)
-
-
-RequestFunction = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 class OllamaVerifier:
@@ -77,12 +75,9 @@ class OllamaVerifier:
                 {"role": "user", "content": json.dumps(evidence, sort_keys=True)},
             ],
         }
-        try:
-            response = self.request_function(payload)
-        except OSError as error:
-            raise StageInfrastructureError(
-                f"LLM server {self.settings.endpoint} is unavailable; restore it and resume verification"
-            ) from error
+        response = request_with_retry(
+            self.request_function, payload, self.settings, service=f"LLM server {self.settings.endpoint}"
+        )
         self.used_model = True
         verification = Verification.model_validate_json(response["message"]["content"])
         observations = source["classification"]

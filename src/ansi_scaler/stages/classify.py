@@ -5,7 +5,7 @@ import io
 import json
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -14,7 +14,8 @@ from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl, resolve_path
 from ansi_scaler.reports import checkerboard
-from ansi_scaler.runner import StageInfrastructureError, run_stage
+from ansi_scaler.runner import run_stage
+from ansi_scaler.stages.ollama import RequestFunction, request_with_retry
 
 
 CLASSIFIER_PROMPT = """Inspect this isolated game-art cutout rendered over a checkerboard.
@@ -33,9 +34,6 @@ class Classification(BaseModel):
     visually_coherent: bool
     artifact_flags: list[str]
     uncertainty: float = Field(ge=0.0, le=1.0)
-
-
-RequestFunction = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 class OllamaClassifier:
@@ -91,12 +89,9 @@ class OllamaClassifier:
                 }
             ],
         }
-        try:
-            response = self.request_function(payload)
-        except OSError as error:
-            raise StageInfrastructureError(
-                f"VLM server {self.settings.endpoint} is unavailable; restore it and resume classification"
-            ) from error
+        response = request_with_retry(
+            self.request_function, payload, self.settings, service=f"VLM server {self.settings.endpoint}"
+        )
         self.used_model = True
         classification = Classification.model_validate_json(response["message"]["content"])
         return {
