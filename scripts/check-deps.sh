@@ -2,7 +2,7 @@
 set -euo pipefail
 
 failed=0
-for command in cc c++ cargo zstd nvidia-smi; do
+for command in cc c++ nvidia-smi; do
     if ! command -v "${command}" >/dev/null 2>&1; then
         echo "missing dependency: ${command}" >&2
         failed=1

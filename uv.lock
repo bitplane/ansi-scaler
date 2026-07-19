@@ -45,6 +45,7 @@ source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
     { name = "cairosvg" },
+    { name = "chuda-ansi" },
     { name = "diffusers" },
     { name = "fastapi" },
     { name = "jinja2" },
@@ -79,6 +80,7 @@ dev = [
 requires-dist = [
     { name = "accelerate", specifier = ">=1.9" },
     { name = "cairosvg", specifier = ">=2.8" },
+    { name = "chuda-ansi", specifier = "==0.2.3" },
     { name = "diffusers", specifier = ">=0.35" },
     { name = "fastapi", specifier = ">=0.116" },
     { name = "jinja2", specifier = ">=3.1" },
@@ -211,6 +213,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/80/cc/f920afd1a23c58ccd53c1d36085a71893a4737ff5e66e0371efab6809850/charset_normalizer-3.4.9-cp312-cp312-win_amd64.whl", hash = "sha256:4b3dac63058cc36820b0dd072f89898604e2d39686fe05321729d00d8ac185a0", size = 162557, upload-time = "2026-07-07T14:33:32.176Z" },
     { url = "https://files.pythonhosted.org/packages/f0/e6/0386d43a261ff4e4b30c5857af7df877254b46bec7b9d1b74b6bf969a90b/charset_normalizer-3.4.9-cp312-cp312-win_arm64.whl", hash = "sha256:78fa18e436a1a0e58dbd7e02fc4473f3f32cceb12df9dfca542d075961c307d2", size = 152665, upload-time = "2026-07-07T14:33:33.711Z" },
     { url = "https://files.pythonhosted.org/packages/98/2b/f97f1c193fb855c345d678f5077d6926034db0722df74c8f057020e05a25/charset_normalizer-3.4.9-py3-none-any.whl", hash = "sha256:68e5f26a1ad57ded6d1cfb85331d1c1a195314756471d97758c48498bb4dcdf5", size = 64538, upload-time = "2026-07-07T14:34:56.993Z" },
+]
+
+[[package]]
+name = "chuda-ansi"
+version = "0.2.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8e/69/8890337915e2f3547bd6644b16a00b90ab2bb5512dde12501db6ba6f6215/chuda_ansi-0.2.3.tar.gz", hash = "sha256:34ebece98c97d071860a387b62c7ecb703685b1046214f035f34ff91ff2c477b", size = 63626, upload-time = "2026-07-19T06:32:59.133Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/b0/5894989d2997e7f6dc5ed6ca18e62632f56975394971afc63478d0659456/chuda_ansi-0.2.3-cp310-abi3-manylinux_2_35_x86_64.whl", hash = "sha256:cc23f7b8bd1c534cba156c18dc568239416b0a733cf58447ca7c7e6310bf82d3", size = 841956, upload-time = "2026-07-19T06:32:57.63Z" },
 ]
 
 [[package]]

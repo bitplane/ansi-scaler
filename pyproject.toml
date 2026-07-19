@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "accelerate>=1.9",
     "cairosvg>=2.8",
+    "chuda-ansi==0.2.3",
     "diffusers>=0.35",
     "fastapi>=0.116",
     "jinja2>=3.1",

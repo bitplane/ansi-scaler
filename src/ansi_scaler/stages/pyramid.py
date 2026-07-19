@@ -1,23 +1,19 @@
 from __future__ import annotations
 
-import errno
+import hashlib
 import importlib.metadata
 import io
 import json
 import math
-import shutil
-import subprocess
 import tarfile
-import tempfile
 import traceback
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from concurrent.futures.process import BrokenProcessPool
 from functools import lru_cache
-from multiprocessing import get_context
 from pathlib import Path
 from typing import Any
 
 import cairosvg
+import chuda
+import zstandard
 from PIL import Image
 from tqdm.auto import tqdm
 
@@ -26,7 +22,6 @@ from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import sha256_file, stable_id
 from ansi_scaler.manifests import append_jsonl, known_ids, read_jsonl, relative_path, resolve_path
 from ansi_scaler.runner import StageInfrastructureError
-from ansi_scaler.stages.lod import lod_worker_count
 
 
 PYRAMID_FORMAT = "ansi-scaler-pyramid-v2"
@@ -41,12 +36,6 @@ def rasterizer_signature() -> dict[str, str]:
         "pillow_version": importlib.metadata.version("pillow"),
         "mode": "RGBA",
     }
-
-
-def _raise_if_infrastructure_error(error: Exception) -> None:
-    infrastructure_errnos = {errno.EACCES, errno.ENOMEM, errno.ENOSPC, errno.EROFS}
-    if isinstance(error, MemoryError) or (isinstance(error, OSError) and error.errno in infrastructure_errnos):
-        raise StageInfrastructureError(f"Pyramid input preparation infrastructure failed: {error}") from error
 
 
 def source_for_width(record: dict[str, Any], width: int, config: RunConfig) -> tuple[str, Path]:
@@ -64,7 +53,8 @@ def source_for_width(record: dict[str, Any], width: int, config: RunConfig) -> t
 
 
 def pyramid_id(record: dict[str, Any], config: RunConfig) -> str:
-    return stable_id(PYRAMID_FORMAT, record["id"], config.chuda.model_dump(mode="json"), rasterizer_signature())
+    settings = config.chuda.model_dump(mode="json", exclude={"backend"})
+    return stable_id(PYRAMID_FORMAT, record["id"], settings, rasterizer_signature())
 
 
 def object_geometry(record: dict[str, Any], config: RunConfig) -> dict[str, Any]:
@@ -108,98 +98,10 @@ def object_geometry(record: dict[str, Any], config: RunConfig) -> dict[str, Any]
     }
 
 
-def _save_shared_crop(
-    image: Image.Image,
-    destination: Path,
-    canvas_size: list[int],
-    render_bbox_px: list[int],
-) -> None:
-    if image.size != tuple(canvas_size):
-        raise ValueError(f"Prepared source canvas mismatch: expected {tuple(canvas_size)}, got {image.size}")
-    crop = image.convert("RGBA").crop(tuple(render_bbox_px))
-    expected = (render_bbox_px[2] - render_bbox_px[0], render_bbox_px[3] - render_bbox_px[1])
-    if crop.size != expected:
-        raise ValueError(f"Prepared source crop mismatch: expected {expected}, got {crop.size}")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    crop.save(destination, format="PNG")
-
-
-def _write_cropped_original(
-    source: Path,
-    destination: Path,
-    canvas_size: list[int],
-    render_bbox_px: list[int],
-) -> None:
-    with Image.open(source) as image:
-        _save_shared_crop(image, destination, canvas_size, render_bbox_px)
-
-
-def _write_cropped_svg(
-    source: Path,
-    destination: Path,
-    canvas_size: list[int],
-    render_bbox_px: list[int],
-) -> None:
-    encoded = cairosvg.svg2png(
-        url=str(source),
-        output_width=canvas_size[0],
-        output_height=canvas_size[1],
-    )
-    with Image.open(io.BytesIO(encoded)) as image:
-        _save_shared_crop(image, destination, canvas_size, render_bbox_px)
-
-
-def _prepare_record_inputs(
-    record: dict[str, Any],
-    config: RunConfig,
-    temporary_root: str,
-    source_names: tuple[str, ...],
-) -> tuple[str, dict[str, Any]]:
-    output_id = pyramid_id(record, config)
-    geometry = object_geometry(record, config)
-    destinations = []
-    for source_name in source_names:
-        if source_name == "original":
-            source_path = resolve_path(record["original"], config.data_dir)
-        else:
-            level = next(level for level in record["levels"] if level["name"] == source_name)
-            source_path = resolve_path(level["svg"], config.data_dir)
-        destination = Path(temporary_root) / "inputs" / source_name / f"{output_id}.png"
-        if source_name == "original":
-            _write_cropped_original(
-                source_path,
-                destination,
-                geometry["canvas_size"],
-                geometry["render_bbox_px"],
-            )
-        else:
-            _write_cropped_svg(
-                source_path,
-                destination,
-                geometry["canvas_size"],
-                geometry["render_bbox_px"],
-            )
-        destinations.append(destination)
-    sizes = []
-    for destination in destinations:
-        with Image.open(destination) as image:
-            sizes.append(image.size)
-    expected = tuple(geometry["render_size_px"])
-    if any(size != expected for size in sizes):
-        raise ValueError(f"Prepared pyramid inputs do not share crop size {expected}: {sizes}")
-    return output_id, geometry
-
-
 def _check_chuda(config: RunConfig) -> None:
-    executable = shutil.which(config.chuda.executable)
-    if executable is None:
-        raise FileNotFoundError(f"Chuda executable was not found on PATH: {config.chuda.executable}")
-    result = subprocess.run([executable, "--version"], check=True, capture_output=True, text=True)
-    actual = result.stdout.strip().removeprefix("chuda ")
+    actual = importlib.metadata.version("chuda-ansi")
     if actual != config.chuda.version:
         raise RuntimeError(f"Expected Chuda {config.chuda.version}, found {actual}")
-    if shutil.which("zstd") is None:
-        raise FileNotFoundError("zstd was not found on PATH")
 
 
 def _normalise_tar_info(info: tarfile.TarInfo) -> tarfile.TarInfo:
@@ -212,28 +114,44 @@ def _normalise_tar_info(info: tarfile.TarInfo) -> tarfile.TarInfo:
     return info
 
 
-def _write_archive(destination: Path, metadata: dict[str, Any], files: list[tuple[Path, str]]) -> None:
+def _write_archive(destination: Path, metadata: dict[str, Any], files: list[tuple[bytes, str]]) -> None:
     with atomic_destination(destination) as temporary:
-        compressor = subprocess.Popen(
-            ["zstd", "-q", "-T0", "-o", str(temporary)],
-            stdin=subprocess.PIPE,
-        )
-        if compressor.stdin is None:
-            raise RuntimeError("Failed to open zstd input")
-        try:
-            with tarfile.open(fileobj=compressor.stdin, mode="w|") as archive:
-                encoded = json.dumps(metadata, sort_keys=True, indent=2).encode()
-                info = _normalise_tar_info(tarfile.TarInfo("metadata.json"))
-                info.size = len(encoded)
-                archive.addfile(info, io.BytesIO(encoded))
-                for path, arcname in files:
-                    info = _normalise_tar_info(archive.gettarinfo(str(path), arcname=arcname))
-                    with path.open("rb") as handle:
-                        archive.addfile(info, handle)
-        finally:
-            compressor.stdin.close()
-        if compressor.wait() != 0:
-            raise RuntimeError("zstd failed while writing pyramid archive")
+        compressor = zstandard.ZstdCompressor(threads=-1)
+        with temporary.open("wb") as raw:
+            with compressor.stream_writer(raw, closefd=False) as compressed:
+                with tarfile.open(fileobj=compressed, mode="w|") as archive:
+                    encoded = json.dumps(metadata, sort_keys=True, indent=2).encode()
+                    info = _normalise_tar_info(tarfile.TarInfo("metadata.json"))
+                    info.size = len(encoded)
+                    archive.addfile(info, io.BytesIO(encoded))
+                    for data, arcname in files:
+                        info = _normalise_tar_info(tarfile.TarInfo(arcname))
+                        info.size = len(data)
+                        archive.addfile(info, io.BytesIO(data))
+
+
+def _crop_record_sources(
+    record: dict[str, Any], config: RunConfig, geometry: dict[str, Any], source_names: tuple[str, ...]
+) -> dict[str, chuda.Image]:
+    canvas_size = geometry["canvas_size"]
+    render_bbox = tuple(geometry["render_bbox_px"])
+    result: dict[str, chuda.Image] = {}
+    for source_name in source_names:
+        if source_name == "original":
+            source = resolve_path(record["original"], config.data_dir)
+            with Image.open(source) as opened:
+                image = opened.convert("RGBA")
+        else:
+            level = next(level for level in record["levels"] if level["name"] == source_name)
+            source = resolve_path(level["svg"], config.data_dir)
+            encoded = cairosvg.svg2png(url=str(source), output_width=canvas_size[0], output_height=canvas_size[1])
+            with Image.open(io.BytesIO(encoded)) as opened:
+                image = opened.convert("RGBA")
+        if image.size != tuple(canvas_size):
+            raise ValueError(f"Prepared source canvas mismatch: expected {tuple(canvas_size)}, got {image.size}")
+        cropped = image.crop(render_bbox)
+        result[source_name] = chuda.Image.from_rgba(cropped.width, cropped.height, cropped.tobytes())
+    return result
 
 
 def run_pyramid(
@@ -266,123 +184,54 @@ def run_pyramid(
         return 0, 0, skipped
 
     _check_chuda(config)
-    config.run_dir.mkdir(parents=True, exist_ok=True)
-    widths = range(config.chuda.min_width, config.chuda.max_width + 1)
-    with tempfile.TemporaryDirectory(prefix="ansi-scaler-pyramids-", dir=config.run_dir) as temporary_name:
-        temporary = Path(temporary_name)
-        source_names = tuple(
-            dict.fromkeys(source_for_width(pending[0], width, config)[0] for width in widths)
-        )
-        input_roots = {source_name: temporary / "inputs" / source_name for source_name in source_names}
-        geometries: dict[str, dict[str, Any]] = {}
-        prepared = []
-        failures = 0
-        workers = min(lod_worker_count(config), len(pending))
-        progress = tqdm(total=len(pending), desc="prepare pyramid inputs", unit="image", dynamic_ncols=True)
-        progress.set_postfix(completed=0, failed=0, skipped=skipped, refresh=False)
-
-        def accept_result(record: dict[str, Any], result: tuple[str, dict[str, Any]]) -> None:
-            output_id, geometry = result
-            geometries[output_id] = geometry
-            prepared.append(record)
-
-        def reject_record(record: dict[str, Any], error: Exception) -> None:
-            nonlocal failures
-            append_jsonl(
-                error_manifest,
-                {
-                    "parent_id": record["id"],
-                    "error_type": type(error).__name__,
-                    "error": str(error),
-                    "traceback": "".join(traceback.format_exception(error)),
-                },
-            )
-            failures += 1
-
-        try:
-            if workers <= 1:
-                for record in pending:
-                    try:
-                        accept_result(
-                            record,
-                            _prepare_record_inputs(record, config, temporary_name, source_names),
-                        )
-                    except Exception as error:  # noqa: BLE001 - reject only the malformed image
-                        _raise_if_infrastructure_error(error)
-                        reject_record(record, error)
-                    progress.update()
-                    progress.set_postfix(completed=len(prepared), failed=failures, skipped=skipped, refresh=False)
-            else:
-                with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as executor:
-                    futures = {
-                        executor.submit(_prepare_record_inputs, record, config, temporary_name, source_names): record
-                        for record in pending
-                    }
-                    for future in as_completed(futures):
-                        record = futures[future]
-                        try:
-                            accept_result(record, future.result())
-                        except (BrokenProcessPool, BrokenPipeError, EOFError) as error:
-                            raise StageInfrastructureError("Pyramid input worker pool failed") from error
-                        except StageInfrastructureError:
-                            raise
-                        except Exception as error:  # noqa: BLE001 - reject only the malformed image
-                            _raise_if_infrastructure_error(error)
-                            reject_record(record, error)
-                        progress.update()
-                        progress.set_postfix(
-                            completed=len(prepared), failed=failures, skipped=skipped, refresh=False
-                        )
-        finally:
-            progress.close()
-
-        pending = prepared
-        if not pending:
-            return 0, failures, skipped
-
-        rendered_root = temporary / "rendered"
-        for width in tqdm(widths, desc="chuda widths", unit="width", dynamic_ncols=True):
-            source_name, _ = source_for_width(pending[0], width, config)
-            subprocess.run(
-                [
-                    config.chuda.executable,
-                    str(input_roots[source_name]),
-                    "--size",
-                    str(width),
-                    "--output",
-                    str(rendered_root / f"{width:03d}"),
-                ],
-                check=True,
-            )
-
-        successes = 0
-        for record in tqdm(pending, desc="pack pyramids", unit="pyramid", dynamic_ncols=True):
+    widths = tuple(range(config.chuda.min_width, config.chuda.max_width + 1))
+    source_names = tuple(dict.fromkeys(source_for_width(pending[0], width, config)[0] for width in widths))
+    renderer = chuda.Renderer(config.chuda.backend, config.chuda.max_batch_cells)
+    successes = 0
+    failures = 0
+    rendered_cells = 0
+    progress = tqdm(total=len(pending), desc="pyramids", unit="pyramid", dynamic_ncols=True)
+    progress.set_postfix(completed=0, failed=0, skipped=skipped, cells=0, refresh=False)
+    try:
+        for record in pending:
             output_id = pyramid_id(record, config)
             try:
+                geometry = object_geometry(record, config)
+                sources = _crop_record_sources(record, config, geometry, source_names)
+                requests = [(sources[source_for_width(record, width, config)[0]], width) for width in widths]
+                frames = renderer.render_many(
+                    requests,
+                    font_ratio=config.chuda.font_ratio,
+                    transparent_threshold=config.chuda.transparent_threshold,
+                )
                 levels = []
                 files = []
-                for width in widths:
-                    path = rendered_root / f"{width:03d}" / f"{output_id}.ansi"
-                    data = path.read_bytes()
+                backends = set()
+                for width, frame in zip(widths, frames, strict=True):
+                    data = bytes(frame.to_ansi())
                     source_name, _ = source_for_width(record, width, config)
+                    path = f"levels/{width:03d}.ansi"
                     levels.append(
                         {
                             "width": width,
-                            "rows": data.count(b"\n"),
+                            "rows": frame.rows,
                             "source_lod": source_name,
                             "bytes": len(data),
-                            "sha256": sha256_file(path),
-                            "path": f"levels/{width:03d}.ansi",
+                            "sha256": hashlib.sha256(data).hexdigest(),
+                            "path": path,
                         }
                     )
-                    files.append((path, f"levels/{width:03d}.ansi"))
+                    files.append((data, path))
+                    backends.add(frame.backend)
+                    rendered_cells += frame.columns * frame.rows
                 metadata = {
                     "format": PYRAMID_FORMAT,
                     "id": output_id,
                     "parent_id": record["id"],
                     "chuda": config.chuda.model_dump(mode="json"),
+                    "chuda_backends": sorted(backends),
                     "input_rasterization": rasterizer_signature(),
-                    "geometry": geometries[output_id],
+                    "geometry": geometry,
                     "levels": levels,
                 }
                 destination = artifact_path(config.artifact_dir, "pyramids", output_id, ".tar.zst")
@@ -397,14 +246,19 @@ def run_pyramid(
                         "artifact": relative_path(destination, config.data_dir),
                         "archive_sha256": sha256_file(destination),
                         "chuda_version": config.chuda.version,
+                        "chuda_backends": metadata["chuda_backends"],
                         "pyramid_format": metadata["format"],
                         "input_rasterization": metadata["input_rasterization"],
-                        "geometry": geometries[output_id],
+                        "geometry": geometry,
                         "pyramid_levels": levels,
                     },
                 )
                 successes += 1
-            except Exception as error:  # noqa: BLE001 - continue packaging independent pyramids
+            except (MemoryError, OSError) as error:
+                raise StageInfrastructureError(f"Pyramid infrastructure failed: {error}") from error
+            except RuntimeError as error:
+                if config.chuda.backend == "cuda":
+                    raise StageInfrastructureError(f"Chuda CUDA backend failed: {error}") from error
                 append_jsonl(
                     error_manifest,
                     {
@@ -415,4 +269,21 @@ def run_pyramid(
                     },
                 )
                 failures += 1
+            except Exception as error:  # noqa: BLE001 - reject only the malformed source record
+                append_jsonl(
+                    error_manifest,
+                    {
+                        "parent_id": record["id"],
+                        "error_type": type(error).__name__,
+                        "error": str(error),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
+                failures += 1
+            progress.update()
+            progress.set_postfix(
+                completed=successes, failed=failures, skipped=skipped, cells=rendered_cells, refresh=False
+            )
+    finally:
+        progress.close()
     return successes, failures, skipped

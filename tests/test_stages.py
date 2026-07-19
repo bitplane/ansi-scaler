@@ -12,9 +12,10 @@ from ansi_scaler.stages.classify import run_classify
 from ansi_scaler.stages.lod import run_lod
 from ansi_scaler.stages.pyramid import (
     PYRAMID_FORMAT,
-    _prepare_record_inputs,
+    _crop_record_sources,
     object_geometry,
     pyramid_id,
+    run_pyramid,
     source_for_width,
 )
 from ansi_scaler.stages.rembg import run_rembg
@@ -124,6 +125,15 @@ def test_pyramid_identity_includes_renderer_version() -> None:
     assert PYRAMID_FORMAT == "ansi-scaler-pyramid-v2"
 
 
+def test_pyramid_identity_does_not_depend_on_backend() -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    record = {"id": "lod-record"}
+    first = pyramid_id(record, config)
+    config.chuda.backend = "cpu"
+
+    assert pyramid_id(record, config) == first
+
+
 def test_pyramid_geometry_uses_alpha_bounds_and_padding(tmp_path: Path) -> None:
     config = load_run_config(Path("configs/runs/smoke.yaml"))
     config.data_dir = tmp_path
@@ -158,19 +168,43 @@ def test_pyramid_prepares_identically_sized_shared_crops(tmp_path: Path) -> None
         levels.append({"name": name, "svg": path.relative_to(config.data_dir).as_posix()})
     record = {"id": "lod-record", "original": "original.png", "levels": levels}
 
-    output_id, geometry = _prepare_record_inputs(
-        record,
-        config,
-        str(config.run_dir),
-        ("lod-3", "lod-2", "lod-1", "original"),
-    )
+    geometry = object_geometry(record, config)
+    sources = _crop_record_sources(record, config, geometry, ("lod-3", "lod-2", "lod-1", "original"))
 
     assert geometry["render_bbox_px"] == [18, 8, 62, 52]
     assert geometry["render_size_px"] == [44, 44]
-    for source_name in ("lod-3", "lod-2", "lod-1", "original"):
-        with Image.open(config.run_dir / "inputs" / source_name / f"{output_id}.png") as prepared:
-            assert prepared.size == (44, 44)
-            assert prepared.mode == "RGBA"
+    for source in sources.values():
+        assert (source.width, source.height) == (44, 44)
+
+
+def test_pyramid_renders_and_packs_one_record_without_staging_tree(tmp_path: Path) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    config.chuda.backend = "cpu"
+    config.chuda.min_width = 2
+    config.chuda.max_width = 3
+    config.manifest_dir.mkdir(parents=True)
+    original = config.data_dir / "cutout.png"
+    original.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGBA", (16, 16), (20, 40, 60, 255)).save(original)
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#14283c"/></svg>'
+    levels = []
+    for name in ("lod-1", "lod-2", "lod-3"):
+        path = config.data_dir / f"{name}.svg"
+        path.write_text(svg)
+        levels.append({"name": name, "svg": path.relative_to(config.data_dir).as_posix()})
+    write_jsonl(
+        config.manifest_dir / "lods.jsonl",
+        [{"id": "lod-record", "original": "cutout.png", "levels": levels}],
+    )
+
+    assert run_pyramid(config) == (1, 0, 0)
+
+    record = next(read_jsonl(config.manifest_dir / "pyramids.jsonl"))
+    assert [level["width"] for level in record["pyramid_levels"]] == [2, 3]
+    assert record["chuda_backends"] == ["cpu"]
+    assert (config.data_dir / record["artifact"]).is_file()
+    assert not list(config.run_dir.glob("ansi-scaler-pyramids-*"))
 
 
 def test_pipeline_can_run_through_pyramid(tmp_path: Path, monkeypatch) -> None:

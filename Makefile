@@ -49,7 +49,7 @@ rembg: .venv/.installed  ## Remove raster backgrounds with the configured model
 lod: .venv/.installed  ## Build SVG LODs and PNG previews with VTracer
 	scripts/lod.sh $(RUN_CONFIG)
 
-pyramid: .venv/.installed .tools/.chuda-0.1.1  ## Build compressed ANSI pyramids with pinned Chuda
+pyramid: .venv/.installed  ## Build compressed ANSI pyramids with the pinned Chuda Python backend
 	scripts/pyramid.sh $(RUN_CONFIG)
 
 classify: .venv/.installed  ## Classify cutouts with the configured Ollama VLM
@@ -61,10 +61,10 @@ verify: .venv/.installed  ## Verify VLM classifications with the configured Olla
 review: .venv/.installed  ## Open the local corpus review and annotation UI
 	scripts/review.sh $(RUN_CONFIG)
 
-corpus: deps .tools/.chuda-0.1.1  ## Resume the configured corpus through ANSI pyramids
+corpus: deps  ## Resume the configured corpus through ANSI pyramids
 	RETRY_ERRORS=$(RETRY_ERRORS) scripts/corpus.sh $(RUN_CONFIG)
 
-smoke: deps .tools/.chuda-0.1.1  ## Run ten real samples through all stages (downloads models; CUDA required)
+smoke: deps  ## Run ten real samples through all stages (downloads models; CUDA required)
 	RETRY_ERRORS=$(RETRY_ERRORS) scripts/corpus.sh configs/runs/smoke.yaml
 
 .venv/.installed: pyproject.toml uv.lock .venv/.created scripts/install.sh
@@ -72,9 +72,6 @@ smoke: deps .tools/.chuda-0.1.1  ## Run ten real samples through all stages (dow
 
 .venv/.installed-dev: pyproject.toml uv.lock .venv/.created scripts/install-dev.sh
 	scripts/install-dev.sh
-
-.tools/.chuda-0.1.1: scripts/install-chuda.sh
-	scripts/install-chuda.sh 0.1.1
 
 .venv/.created: .python-version scripts/venv.sh
 	scripts/venv.sh

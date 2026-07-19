@@ -24,26 +24,25 @@ make help
 
 ### System dependencies
 
-The locked Python environment does not replace host compilers, the NVIDIA
-driver, Rust, or `zstd`. On Ubuntu, the baseline packages are:
+The locked Python environment does not replace host compilers or the NVIDIA
+driver. On Ubuntu, the baseline package is:
 
 ```bash
-sudo apt install build-essential zstd
+sudo apt install build-essential
 ```
 
 The venv deliberately uses uv-managed CPython rather than Ubuntu's system
 Python, so its matching development headers are installed automatically and
-consistently. Install Rust with `rustup`, and install an NVIDIA driver supported
-by the locked PyTorch build. Check the complete host before starting an
-expensive run:
+consistently. Install an NVIDIA driver supported by the locked PyTorch build.
+Check the complete host before starting an expensive run:
 
 ```bash
 make deps
 ```
 
-This verifies the C/C++ compiler, `Python.h`, Cargo, zstd, NVIDIA driver access,
-PyTorch CUDA, and ONNX Runtime's CUDA provider. `make corpus` and `make smoke`
-run the same guard automatically.
+This verifies the C/C++ compiler, `Python.h`, NVIDIA driver access, PyTorch
+CUDA, and ONNX Runtime's CUDA provider. `make corpus` and `make smoke` run the
+same guard automatically.
 
 ## Running the corpus
 
@@ -107,9 +106,9 @@ rasterized at the original canvas dimensions before the shared integer crop, so
 every source presented to Chuda has identical dimensions and alignment; the small
 LOD PNGs remain review thumbnails only. The bboxes and rasterizer provenance are
 retained in original-canvas coordinates for the training builder.
-The target builds the pinned Chuda 0.1.1 release from crates.io into `.tools/`;
-Chuda does not need to be installed globally. A Rust toolchain and `zstd` are
-the only system-level requirements for this stage.
+The project pins the `chuda-ansi` Python package, which contains both CUDA and
+CPU renderers. Chuda selects CUDA when it is usable and otherwise warns once
+before falling back to CPU; it does not need to be installed globally.
 
 ## Reviewing corpus quality
 

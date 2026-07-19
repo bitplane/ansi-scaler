@@ -72,8 +72,11 @@ class LlmSettings(BaseModel):
 
 
 class ChudaSettings(BaseModel):
-    executable: str = ".tools/bin/chuda"
-    version: str = "0.1.1"
+    version: str = "0.2.3"
+    backend: str = Field(default="auto", pattern="^(auto|cpu|cuda)$")
+    max_batch_cells: int = Field(default=262_144, ge=1)
+    font_ratio: float = Field(default=2.0, gt=0.0)
+    transparent_threshold: float = Field(default=0.10, ge=0.0, le=1.0)
     min_width: int = Field(default=2, ge=1)
     max_width: int = Field(default=120, ge=1)
     lod_3_below: int = Field(default=10, ge=1)

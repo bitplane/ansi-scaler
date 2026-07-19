@@ -38,8 +38,8 @@ llm:
   timeout_seconds: 300
   keep_alive: 10m
 chuda:
-  executable: .tools/bin/chuda
-  version: 0.1.1
+  version: 0.2.3
+  backend: auto
   min_width: 2
   max_width: 120
   lod_3_below: 10

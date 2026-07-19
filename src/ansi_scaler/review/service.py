@@ -60,8 +60,10 @@ class ReviewService:
             pyramid = (
                 _last(
                     children[(lod["id"], "pyramid")],
-                    lambda item: item.get("chuda_version") == self.config.chuda.version
-                    and item.get("pyramid_format") == PYRAMID_FORMAT,
+                    lambda item: (
+                        item.get("chuda_version") == self.config.chuda.version
+                        and item.get("pyramid_format") == PYRAMID_FORMAT
+                    ),
                 )
                 if lod is not None
                 else None
