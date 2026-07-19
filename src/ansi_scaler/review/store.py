@@ -251,7 +251,16 @@ class ReviewStore:
     def active_reviews(self) -> list[ReviewEvent]:
         events = self.review_events()
         superseded = {event.supersedes for event in events if event.supersedes}
-        return [event for event in events if event.event_type == "set" and event.event_id not in superseded]
+        active = [event for event in events if event.event_type == "set" and event.event_id not in superseded]
+        by_asset: dict[str, ReviewEvent] = {}
+        for event in active:
+            by_asset[self.asset_id(event)] = event
+        return list(by_asset.values())
+
+    @staticmethod
+    def asset_id(event: ReviewEvent) -> str:
+        """Return the stable prompt identity, including for legacy raster-keyed events."""
+        return event.outputs.get("prompt", event.sample_id)
 
     def manifest_counts(self) -> dict[str, int]:
         with self._lock:

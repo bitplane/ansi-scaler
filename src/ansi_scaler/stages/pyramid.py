@@ -236,13 +236,17 @@ def run_pyramid(
         output_manifest.unlink(missing_ok=True)
         error_manifest.unlink(missing_ok=True)
     completed = known_ids(output_manifest)
-    failed_parents = {record["parent_id"] for record in read_jsonl(error_manifest)} if not retry_errors else set()
+    errors = list(read_jsonl(error_manifest)) if not retry_errors else []
+    failed_outputs = {record["output_id"] for record in errors if record.get("output_id")}
+    legacy_failed_parents = {record["parent_id"] for record in errors if not record.get("output_id")}
     unique_records = {record["id"]: record for record in read_jsonl(config.manifest_dir / "lods.jsonl")}
     selected = list(unique_records.values())[: limit or config.limit]
     pending = [
         record
         for record in selected
-        if pyramid_id(record, config) not in completed and record["id"] not in failed_parents
+        if pyramid_id(record, config) not in completed
+        and pyramid_id(record, config) not in failed_outputs
+        and record["id"] not in legacy_failed_parents
     ]
     skipped = len(selected) - len(pending)
     if not pending:
@@ -283,6 +287,7 @@ def run_pyramid(
             error_manifest,
             {
                 "parent_id": record["id"],
+                "output_id": pyramid_id(record, config),
                 "error_type": type(error).__name__,
                 "error": str(error),
                 "traceback": traceback.format_exc(),

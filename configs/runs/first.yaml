@@ -70,7 +70,7 @@ lod:
       corner_threshold: 60
       splice_threshold: 50
     - name: lod-1
-      preview_size: 128
+      preview_size: 512
       min_cells: 40
       max_cells: 79
       filter_speckle: 4
@@ -80,7 +80,7 @@ lod:
       corner_threshold: 60
       splice_threshold: 45
     - name: lod-2
-      preview_size: 64
+      preview_size: 512
       min_cells: 10
       max_cells: 39
       filter_speckle: 12
@@ -90,7 +90,7 @@ lod:
       corner_threshold: 55
       splice_threshold: 40
     - name: lod-3
-      preview_size: 32
+      preview_size: 512
       min_cells: 0
       max_cells: 9
       filter_speckle: 32

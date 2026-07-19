@@ -13,6 +13,7 @@ from ansi_scaler.manifests import resolve_path
 from ansi_scaler.review.ansi import PyramidCache, ansi_to_runs
 from ansi_scaler.review.models import ReviewEvent, ReviewSubmission
 from ansi_scaler.review.store import ReviewStore
+from ansi_scaler.stages.generate import SanaGenerator
 from ansi_scaler.stages.pyramid import PYRAMID_FORMAT
 
 
@@ -44,14 +45,18 @@ class ReviewService:
             if record.get("parent_id"):
                 children[(record["parent_id"], record["stage"])].append(record)
         prompts = {record["id"]: record for record in by_stage["prompts"]}
-        active_reviews = {event.snapshot_id: event for event in self.store.active_reviews()}
+        active_reviews = {self.store.asset_id(event): event for event in self.store.active_reviews()}
         all_reviews: dict[str, list[ReviewEvent]] = defaultdict(list)
         for event in self.store.review_events():
             if event.event_type == "set":
-                all_reviews[event.sample_id].append(event)
+                all_reviews[self.store.asset_id(event)].append(event)
 
         samples = []
-        for raster in by_stage["generate"]:
+        for prompt in by_stage["prompts"]:
+            expected_raster = SanaGenerator(self.config).output_id(prompt)
+            raster = _last(children[(prompt["id"], "generate")], lambda item: item["id"] == expected_raster)
+            if raster is None:
+                continue
             cutout = _last(
                 children[(raster["id"], "rembg")],
                 lambda item: item.get("rembg_model_sha256") == self.config.rembg.sha256,
@@ -84,7 +89,7 @@ class ReviewService:
                 if classification is not None
                 else None
             )
-            prompt = prompts.get(raster.get("parent_id"))
+            prompt = prompts.get(raster.get("parent_id"), prompt)
             records = {
                 key: value
                 for key, value in {
@@ -100,10 +105,12 @@ class ReviewService:
             }
             outputs = {stage: record["id"] for stage, record in records.items()}
             snapshot_id = stable_id("review-snapshot-v1", raster["id"], outputs)
-            review = active_reviews.get(snapshot_id)
+            asset_id = prompt["id"] if prompt is not None else raster["id"]
+            active_review = active_reviews.get(asset_id)
+            review = active_review if active_review is not None and active_review.snapshot_id == snapshot_id else None
             machine_decision = verification.get("verification", {}).get("decision") if verification else "missing"
             sample = {
-                "sample_id": raster["id"],
+                "sample_id": asset_id,
                 "snapshot_id": snapshot_id,
                 "outputs": outputs,
                 "records": records,
@@ -116,7 +123,7 @@ class ReviewService:
                 "verification": verification,
                 "machine_decision": machine_decision,
                 "review": review,
-                "history": all_reviews.get(raster["id"], []),
+                "history": all_reviews.get(asset_id, []),
                 "kit_id": raster.get("kit_id", "unknown"),
                 "role": raster.get("role", "unknown"),
                 "concept_id": raster.get("concept_id", "unknown"),
@@ -198,6 +205,14 @@ class ReviewService:
             raise ValueError("The reviewed sample snapshot is stale or unknown")
         if submission.outcome == "reject" and submission.issue_code not in self.config.review.issues:
             raise ValueError("The rejection issue is not configured for this run")
+        prior = next(
+            (
+                event
+                for event in reversed(self.store.active_reviews())
+                if self.store.asset_id(event) == sample["sample_id"]
+            ),
+            None,
+        )
         event = ReviewEvent(
             reviewer=self.reviewer,
             run=self.config.name,
@@ -208,7 +223,7 @@ class ReviewService:
             issue_code=submission.issue_code,
             introduced_by=submission.introduced_by,
             notes=submission.notes,
-            supersedes=submission.supersedes,
+            supersedes=prior.event_id if prior else None,
         )
         self.store.append_event(event)
         return event

@@ -144,13 +144,43 @@ while `1:1` preserves 8×16 terminal cells and allows scrolling. The canvas rend
 geometrically synthesizes block, braille, sextant, wedge, and legacy-bar glyphs so coloured cells
 remain seamless; ordinary text uses the bundled terminal-symbol font. The
 initial width is 40 and browser-local preferences persist between samples.
-Raster and SVG-preview stages default to the same fitted display footprint for
-direct comparison. Use `Native pixels` to inspect their actual preview sizes;
-keys `0`–`3` select the corresponding LOD.
+Raster and SVG-preview stages always use the same fitted display footprint for
+direct comparison; keys `0`–`3` select the corresponding LOD.
+All SVG review previews are rasterized once at 512×512 and displayed at 512 CSS
+pixels when space permits, avoiding an additional browser enlargement pass.
 
-Pipeline manifests remain immutable. Human actions are appended to
+Pipeline stages keep their manifests append-only. Human actions are appended to
 `data/runs/<run>/reviews/annotations.jsonl`; the neighbouring SQLite database is
 a disposable index and can be rebuilt. The default queue prioritises conflicts
 introduced by new resource versions, then randomly samples the least-reviewed
 kits, concepts, roles, and machine decisions. Set `ANSI_SCALER_REVIEWER` to
 override the reviewer name recorded in the log.
+
+Each prompt-and-seed record is one stable reviewable asset. Reviewing a newer
+pipeline snapshot supersedes that asset's previous active review while retaining
+the append-only history. Undo removes the new decision without resurrecting the
+older one.
+
+## Corpus garbage collection
+
+Safely inspect and compact one run with:
+
+```bash
+make gc
+make gc RUN_CONFIG=configs/runs/smoke.yaml
+make gc GC_CONFIRM=1
+```
+
+GC refuses to start while a pipeline command or review server is using the
+corpus. It reports removable records, files, true orphans, and on-disk bytes by
+stage before asking for confirmation; `GC_CONFIRM=1` supplies that confirmation
+for automation. Other runs and active human reviews pin their referenced files.
+When a configured chain is only partly rebuilt, GC retains both that partial
+chain and the most recent completed pyramid or verification chain until the
+replacement reaches the same terminal stage.
+
+Applied collections back up the target manifests, annotations, run config, and
+an exact deletion plan beneath `data/runs/<run>/gc/`. Artifact blobs themselves
+are permanently deleted and are not included in that metadata backup. The
+neighbouring review SQLite index is disposable and rebuilt the next time the
+review server starts.

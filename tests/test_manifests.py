@@ -31,6 +31,7 @@ def test_stage_resumes_and_records_failures(tmp_path: Path) -> None:
     assert run_stage(inputs, output, errors, process, id_builder, show_progress=False) == (0, 0, 3)
     assert [record["id"] for record in read_jsonl(output)] == ["out-one", "out-two"]
     assert next(read_jsonl(errors))["parent_id"] == "bad"
+    assert next(read_jsonl(errors))["output_id"] == "out-bad"
 
 
 def test_force_rebuilds_manifest(tmp_path: Path) -> None:

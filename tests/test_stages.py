@@ -92,7 +92,7 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
 
     record = next(read_jsonl(config.manifest_dir / "lods.jsonl"))
     assert [level["name"] for level in record["levels"]] == ["lod-0", "lod-1", "lod-2", "lod-3"]
-    assert [level["preview_size"] for level in record["levels"]] == [512, 128, 64, 32]
+    assert [level["preview_size"] for level in record["levels"]] == [512, 512, 512, 512]
     for level in record["levels"]:
         assert (config.data_dir / level["svg"]).exists()
         preview = Image.open(config.data_dir / level["preview"])

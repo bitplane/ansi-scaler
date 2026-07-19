@@ -14,7 +14,7 @@ STAGES = ("catalog", "prompt", "generate", "rembg", "lod", "pyramid", "classify"
 
 
 class ReviewEvent(BaseModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 2
     event_id: str = Field(default_factory=lambda: str(uuid4()))
     event_type: EventType = "set"
     recorded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -56,7 +56,6 @@ class ReviewSubmission(BaseModel):
     issue_code: str | None = None
     introduced_by: str | None = None
     notes: str = ""
-    supersedes: str | None = None
 
 
 class UndoSubmission(BaseModel):

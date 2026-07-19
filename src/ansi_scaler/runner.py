@@ -20,9 +20,10 @@ class StageInfrastructureError(RuntimeError):
     """A stage-wide dependency or runtime failure that cannot be fixed by trying another item."""
 
 
-def _error_record(parent_id: str, error: Exception) -> dict[str, str]:
+def _error_record(parent_id: str, output_id: str, error: Exception) -> dict[str, str]:
     return {
         "parent_id": parent_id,
+        "output_id": output_id,
         "error_type": type(error).__name__,
         "error": str(error),
         "traceback": traceback.format_exc(),
@@ -47,14 +48,16 @@ def run_stage(
         error_manifest.unlink(missing_ok=True)
 
     completed = known_ids(output_manifest)
-    failed_parents = {record["parent_id"] for record in read_jsonl(error_manifest)} if not retry_errors else set()
+    errors = list(read_jsonl(error_manifest)) if not retry_errors else []
+    failed_outputs = {record["output_id"] for record in errors if record.get("output_id")}
+    legacy_failed_parents = {record["parent_id"] for record in errors if not record.get("output_id")}
     selected_inputs = list(islice(inputs, limit)) if limit is not None else list(inputs)
     pending = []
     scheduled_ids = set(completed)
     skipped = 0
     for source in selected_inputs:
         output_id = id_builder(source)
-        if output_id in scheduled_ids or source["id"] in failed_parents:
+        if output_id in scheduled_ids or output_id in failed_outputs or source["id"] in legacy_failed_parents:
             skipped += 1
             continue
         pending.append(source)
@@ -83,7 +86,7 @@ def run_stage(
             except StageInfrastructureError:
                 raise
             except Exception as error:  # noqa: BLE001 - batch processing must preserve later records
-                append_jsonl(error_manifest, _error_record(parent_id, error))
+                append_jsonl(error_manifest, _error_record(parent_id, output_id, error))
                 failures += 1
             progress.set_postfix(completed=successes, failed=failures, skipped=skipped, refresh=False)
     finally:
@@ -124,14 +127,16 @@ def run_parallel_stage(
         error_manifest.unlink(missing_ok=True)
 
     completed = known_ids(output_manifest)
-    failed_parents = {record["parent_id"] for record in read_jsonl(error_manifest)} if not retry_errors else set()
+    errors = list(read_jsonl(error_manifest)) if not retry_errors else []
+    failed_outputs = {record["output_id"] for record in errors if record.get("output_id")}
+    legacy_failed_parents = {record["parent_id"] for record in errors if not record.get("output_id")}
     selected = list(islice(inputs, limit)) if limit is not None else list(inputs)
     pending: list[tuple[dict[str, Any], str]] = []
     scheduled_ids = set(completed)
     skipped = 0
     for source in selected:
         output_id = id_builder(source)
-        if output_id in scheduled_ids or source["id"] in failed_parents:
+        if output_id in scheduled_ids or output_id in failed_outputs or source["id"] in legacy_failed_parents:
             skipped += 1
         else:
             pending.append((source, output_id))
@@ -168,7 +173,7 @@ def run_parallel_stage(
                 except StageInfrastructureError:
                     raise
                 except Exception as error:  # noqa: BLE001 - batch processing must preserve later records
-                    append_jsonl(error_manifest, _error_record(source["id"], error))
+                    append_jsonl(error_manifest, _error_record(source["id"], output_id, error))
                     failures += 1
                 progress.update()
                 progress.set_postfix(completed=successes, failed=failures, skipped=skipped, refresh=False)

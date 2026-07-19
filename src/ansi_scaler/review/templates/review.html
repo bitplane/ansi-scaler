@@ -33,7 +33,7 @@
   </div>
 
   <div class="inspection-grid">
-    <section id="image-panel" class="image-panel checkerboard normalized-raster">
+    <section class="image-panel checkerboard">
       {% if sample.cutout %}<img id="review-image" class="{% if sample.pyramid %}hidden{% endif %}" src="/media/{{ sample.cutout.id }}" alt="Corpus sample">{% else %}<div class="missing">No cutout available</div>{% endif %}
       {% if sample.pyramid %}
       <div id="ansi-view" class="ansi-view fit-mode" data-min-width="{{ sample.pyramid.pyramid_levels[0].width }}" data-max-width="{{ sample.pyramid.pyramid_levels[-1].width }}">
@@ -55,10 +55,6 @@
       </div>
       {% endif %}
       <div id="image-label" class="image-label">{% if sample.pyramid %}ANSI pyramid{% else %}rembg cutout{% endif %}</div>
-      <div id="raster-mode" class="raster-modes {% if sample.pyramid %}hidden{% endif %}" aria-label="Raster comparison size">
-        <button type="button" data-mode="normalized" aria-pressed="true">Same size</button>
-        <button type="button" data-mode="native" aria-pressed="false">Native pixels</button>
-      </div>
     </section>
     <aside class="evidence-panel">
       <section>

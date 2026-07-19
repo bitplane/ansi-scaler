@@ -60,6 +60,6 @@ chuda:
 lod:
   levels:
     - {name: lod-0, preview_size: 512, min_cells: 80, max_cells: 120, filter_speckle: 1, color_precision: 8, layer_difference: 4, length_threshold: 2.0, corner_threshold: 60, splice_threshold: 50}
-    - {name: lod-1, preview_size: 128, min_cells: 40, max_cells: 79, filter_speckle: 4, color_precision: 6, layer_difference: 8, length_threshold: 5.0, corner_threshold: 60, splice_threshold: 45}
-    - {name: lod-2, preview_size: 64, min_cells: 10, max_cells: 39, filter_speckle: 12, color_precision: 5, layer_difference: 16, length_threshold: 8.0, corner_threshold: 55, splice_threshold: 40}
-    - {name: lod-3, preview_size: 32, min_cells: 0, max_cells: 9, filter_speckle: 32, color_precision: 4, layer_difference: 32, length_threshold: 12.0, corner_threshold: 50, splice_threshold: 35}
+    - {name: lod-1, preview_size: 512, min_cells: 40, max_cells: 79, filter_speckle: 4, color_precision: 6, layer_difference: 8, length_threshold: 5.0, corner_threshold: 60, splice_threshold: 45}
+    - {name: lod-2, preview_size: 512, min_cells: 10, max_cells: 39, filter_speckle: 12, color_precision: 5, layer_difference: 16, length_threshold: 8.0, corner_threshold: 55, splice_threshold: 40}
+    - {name: lod-3, preview_size: 512, min_cells: 0, max_cells: 9, filter_speckle: 32, color_precision: 4, layer_difference: 32, length_threshold: 12.0, corner_threshold: 50, splice_threshold: 35}

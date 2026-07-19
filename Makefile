@@ -1,8 +1,9 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
-	deps catalog prompts generate rembg lod pyramid classify verify review corpus smoke
+	deps catalog prompts generate rembg lod pyramid classify verify review corpus smoke gc
 
 RUN_CONFIG ?= configs/runs/first.yaml
 RETRY_ERRORS ?= 0
+GC_CONFIRM ?= 0
 
 all: dev test lint  ## Prepare the project and run all local checks
 
@@ -30,6 +31,9 @@ format: .venv/.installed-dev  ## Format and auto-fix Python code
 
 clean:  ## Remove the venv and local caches, but never corpus data
 	scripts/clean.sh
+
+gc: .venv/.installed  ## Compact superseded corpus data after showing a deletion report
+	GC_CONFIRM=$(GC_CONFIRM) scripts/gc.sh $(RUN_CONFIG)
 
 deps: .venv/.installed  ## Check host build tools, Python headers, CUDA, and GPU runtimes
 	scripts/check-deps.sh

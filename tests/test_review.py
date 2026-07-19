@@ -210,6 +210,32 @@ def test_changed_model_conflict_is_prioritised(tmp_path: Path) -> None:
     service.close()
 
 
+def test_new_snapshot_review_supersedes_prior_asset_review_without_resurrection(tmp_path: Path) -> None:
+    config = review_config(tmp_path)
+    service = ReviewService(config)
+    old = service.samples()[0]
+    first = service.submit(
+        ReviewSubmission(sample_id=old["sample_id"], snapshot_id=old["snapshot_id"], outcome="accept")
+    )
+    write_jsonl(
+        config.manifest_dir / "verifications.jsonl",
+        [verification("verify-1", "verifier-v1", "accept"), verification("verify-2", "verifier-v2", "accept")],
+    )
+    config.llm.prompt_version = "verifier-v2"
+    service.store.refresh_manifests()
+    current = service.samples()[0]
+
+    second = service.submit(
+        ReviewSubmission(sample_id=current["sample_id"], snapshot_id=current["snapshot_id"], outcome="accept")
+    )
+
+    assert second.supersedes == first.event_id
+    assert [event.event_id for event in service.store.active_reviews()] == [second.event_id]
+    service.undo(second.event_id)
+    assert service.store.active_reviews() == []
+    service.close()
+
+
 def test_review_web_routes_and_safe_media(tmp_path: Path) -> None:
     config = review_config(tmp_path)
     add_pyramid(config)
@@ -221,8 +247,6 @@ def test_review_web_routes_and_safe_media(tmp_path: Path) -> None:
         assert review_response.status_code == 200
         assert 'id="ansi-stage" class="selected"' in review_response.text
         assert 'id="ansi-width" type="range" min="40" max="40" value="40"' in review_response.text
-        assert 'data-mode="normalized" aria-pressed="true">Same size' in review_response.text
-        assert 'data-mode="native" aria-pressed="false">Native pixels' in review_response.text
         assert "review.css?v=" in review_response.text
         assert "review.js?v=" in review_response.text
         ansi_response = client.get("/api/pyramids/pyramid-1/levels/40")
