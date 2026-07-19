@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
@@ -15,11 +16,14 @@ from ansi_scaler.stages.pyramid import (
     _crop_record_sources,
     object_geometry,
     pyramid_id,
+    pyramid_queue_limits,
+    pyramid_worker_count,
     run_pyramid,
     source_for_width,
 )
 from ansi_scaler.stages.rembg import run_rembg
 from ansi_scaler.stages.verify import run_verify
+from ansi_scaler.runner import StageInfrastructureError
 
 
 class FakePipeline:
@@ -134,6 +138,34 @@ def test_pyramid_identity_does_not_depend_on_backend() -> None:
     assert pyramid_id(record, config) == first
 
 
+def test_pyramid_worker_count_reserves_cpu_and_memory_headroom(monkeypatch) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    gib = 1024**3
+    monkeypatch.setattr("ansi_scaler.stages.pyramid.psutil.cpu_count", lambda logical: 8)
+    monkeypatch.setattr(
+        "ansi_scaler.stages.pyramid.psutil.virtual_memory",
+        lambda: SimpleNamespace(total=10 * gib, available=3 * gib),
+    )
+
+    assert pyramid_worker_count(config) == 6
+    assert pyramid_queue_limits(6) == (7, 2)
+
+    config.resources.pyramid_workers = 20
+    assert pyramid_worker_count(config) == 8
+
+
+def test_pyramid_worker_count_keeps_one_worker_under_memory_pressure(monkeypatch) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    gib = 1024**3
+    monkeypatch.setattr("ansi_scaler.stages.pyramid.psutil.cpu_count", lambda logical: 16)
+    monkeypatch.setattr(
+        "ansi_scaler.stages.pyramid.psutil.virtual_memory",
+        lambda: SimpleNamespace(total=10 * gib, available=1 * gib),
+    )
+
+    assert pyramid_worker_count(config) == 1
+
+
 def test_pyramid_geometry_uses_alpha_bounds_and_padding(tmp_path: Path) -> None:
     config = load_run_config(Path("configs/runs/smoke.yaml"))
     config.data_dir = tmp_path
@@ -205,6 +237,76 @@ def test_pyramid_renders_and_packs_one_record_without_staging_tree(tmp_path: Pat
     assert record["chuda_backends"] == ["cpu"]
     assert (config.data_dir / record["artifact"]).is_file()
     assert not list(config.run_dir.glob("ansi-scaler-pyramids-*"))
+    assert run_pyramid(config) == (0, 0, 1)
+
+
+def test_pyramid_continues_after_malformed_prepared_record(tmp_path: Path) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    config.chuda.backend = "cpu"
+    config.chuda.min_width = 2
+    config.chuda.max_width = 3
+    config.resources.pyramid_workers = 2
+    config.manifest_dir.mkdir(parents=True)
+    records = []
+    for record_id, color in (("empty", (0, 0, 0, 0)), ("valid", (20, 40, 60, 255))):
+        original = config.data_dir / f"{record_id}.png"
+        original.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGBA", (16, 16), color).save(original)
+        levels = []
+        for name in ("lod-1", "lod-2", "lod-3"):
+            path = config.data_dir / f"{record_id}-{name}.svg"
+            path.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">'
+                '<rect width="16" height="16" fill="#14283c"/></svg>'
+            )
+            levels.append({"name": name, "svg": path.relative_to(config.data_dir).as_posix()})
+        records.append(
+            {
+                "id": record_id,
+                "original": original.relative_to(config.data_dir).as_posix(),
+                "levels": levels,
+            }
+        )
+    write_jsonl(config.manifest_dir / "lods.jsonl", records)
+
+    assert run_pyramid(config) == (1, 1, 0)
+    assert [record["parent_id"] for record in read_jsonl(config.manifest_dir / "pyramids.jsonl")] == ["valid"]
+    assert [record["parent_id"] for record in read_jsonl(config.manifest_dir / "pyramids.errors.jsonl")] == ["empty"]
+
+
+def test_pyramid_archive_failure_is_infrastructure_error(tmp_path: Path, monkeypatch) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    config.chuda.backend = "cpu"
+    config.chuda.min_width = 2
+    config.chuda.max_width = 3
+    config.resources.pyramid_workers = 1
+    config.manifest_dir.mkdir(parents=True)
+    original = config.data_dir / "cutout.png"
+    original.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGBA", (16, 16), (20, 40, 60, 255)).save(original)
+    levels = []
+    for name in ("lod-1", "lod-2", "lod-3"):
+        path = config.data_dir / f"{name}.svg"
+        path.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">'
+            '<rect width="16" height="16" fill="#14283c"/></svg>'
+        )
+        levels.append({"name": name, "svg": path.relative_to(config.data_dir).as_posix()})
+    write_jsonl(
+        config.manifest_dir / "lods.jsonl",
+        [{"id": "lod-record", "original": "cutout.png", "levels": levels}],
+    )
+
+    def fail_archive(*_args, **_kwargs):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr("ansi_scaler.stages.pyramid._pack_archive", fail_archive)
+
+    with pytest.raises(StageInfrastructureError, match="archive infrastructure failed"):
+        run_pyramid(config)
+    assert not list(read_jsonl(config.manifest_dir / "pyramids.jsonl"))
 
 
 def test_pipeline_can_run_through_pyramid(tmp_path: Path, monkeypatch) -> None:

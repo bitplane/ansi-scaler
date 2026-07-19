@@ -51,6 +51,8 @@ class ResourceSettings(BaseModel):
     memory_headroom: float = Field(default=0.2, ge=0.0, lt=1.0)
     lod_worker_memory_mb: int = Field(default=256, ge=1)
     lod_workers: int | None = Field(default=None, ge=1)
+    pyramid_worker_memory_mb: int = Field(default=128, ge=1)
+    pyramid_workers: int | None = Field(default=None, ge=1)
 
 
 class VlmSettings(BaseModel):

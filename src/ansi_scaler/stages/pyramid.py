@@ -7,12 +7,17 @@ import json
 import math
 import tarfile
 import traceback
+from concurrent.futures import FIRST_COMPLETED, BrokenExecutor, Future, ProcessPoolExecutor, ThreadPoolExecutor, wait
+from contextlib import contextmanager
 from functools import lru_cache
+from multiprocessing import get_context
 from pathlib import Path
-from typing import Any
+from time import perf_counter
+from typing import Any, Iterator
 
 import cairosvg
 import chuda
+import psutil
 import zstandard
 from PIL import Image
 from tqdm.auto import tqdm
@@ -130,12 +135,30 @@ def _write_archive(destination: Path, metadata: dict[str, Any], files: list[tupl
                         archive.addfile(info, io.BytesIO(data))
 
 
-def _crop_record_sources(
+def pyramid_worker_count(config: RunConfig) -> int:
+    resources = config.resources
+    cpu_count = psutil.cpu_count(logical=True) or 1
+    if resources.pyramid_workers is not None:
+        return min(cpu_count, resources.pyramid_workers)
+    memory = psutil.virtual_memory()
+    reserved = int(memory.total * resources.memory_headroom)
+    usable = max(0, memory.available - reserved)
+    per_worker = resources.pyramid_worker_memory_mb * 1024 * 1024
+    memory_workers = usable // per_worker
+    cpu_workers = max(1, cpu_count - 2)
+    return max(1, min(cpu_workers, memory_workers))
+
+
+def pyramid_queue_limits(workers: int) -> tuple[int, int]:
+    return workers + 1, 2
+
+
+def _crop_record_source_buffers(
     record: dict[str, Any], config: RunConfig, geometry: dict[str, Any], source_names: tuple[str, ...]
-) -> dict[str, chuda.Image]:
+) -> dict[str, tuple[int, int, bytes]]:
     canvas_size = geometry["canvas_size"]
     render_bbox = tuple(geometry["render_bbox_px"])
-    result: dict[str, chuda.Image] = {}
+    result: dict[str, tuple[int, int, bytes]] = {}
     for source_name in source_names:
         if source_name == "original":
             source = resolve_path(record["original"], config.data_dir)
@@ -150,8 +173,50 @@ def _crop_record_sources(
         if image.size != tuple(canvas_size):
             raise ValueError(f"Prepared source canvas mismatch: expected {tuple(canvas_size)}, got {image.size}")
         cropped = image.crop(render_bbox)
-        result[source_name] = chuda.Image.from_rgba(cropped.width, cropped.height, cropped.tobytes())
+        result[source_name] = (cropped.width, cropped.height, cropped.tobytes())
     return result
+
+
+def _crop_record_sources(
+    record: dict[str, Any], config: RunConfig, geometry: dict[str, Any], source_names: tuple[str, ...]
+) -> dict[str, chuda.Image]:
+    return {
+        name: chuda.Image.from_rgba(width, height, data)
+        for name, (width, height, data) in _crop_record_source_buffers(record, config, geometry, source_names).items()
+    }
+
+
+def _prepare_record(
+    record: dict[str, Any], config: RunConfig, source_names: tuple[str, ...]
+) -> tuple[dict[str, Any], dict[str, tuple[int, int, bytes]], float]:
+    started = perf_counter()
+    geometry = object_geometry(record, config)
+    sources = _crop_record_source_buffers(record, config, geometry, source_names)
+    return geometry, sources, perf_counter() - started
+
+
+def _pack_archive(destination: Path, metadata: dict[str, Any], files: list[tuple[bytes, str]]) -> tuple[str, float]:
+    started = perf_counter()
+    _write_archive(destination, metadata, files)
+    return sha256_file(destination), perf_counter() - started
+
+
+@contextmanager
+def _pipeline_executors(
+    workers: int,
+    prepare_futures: dict[Future[Any], dict[str, Any]],
+    pack_futures: dict[Future[Any], tuple[dict[str, Any], int]],
+) -> Iterator[tuple[ProcessPoolExecutor, ThreadPoolExecutor]]:
+    with (
+        ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as prepare_executor,
+        ThreadPoolExecutor(max_workers=1, thread_name_prefix="pyramid-pack") as pack_executor,
+    ):
+        try:
+            yield prepare_executor, pack_executor
+        except BaseException:
+            for future in (*prepare_futures, *pack_futures):
+                future.cancel()
+            raise
 
 
 def run_pyramid(
@@ -187,103 +252,175 @@ def run_pyramid(
     widths = tuple(range(config.chuda.min_width, config.chuda.max_width + 1))
     source_names = tuple(dict.fromkeys(source_for_width(pending[0], width, config)[0] for width in widths))
     renderer = chuda.Renderer(config.chuda.backend, config.chuda.max_batch_cells)
+    workers = min(pyramid_worker_count(config), len(pending))
+    prepare_limit, pack_limit = pyramid_queue_limits(workers)
     successes = 0
     failures = 0
     rendered_cells = 0
-    progress = tqdm(total=len(pending), desc="pyramids", unit="pyramid", dynamic_ncols=True)
-    progress.set_postfix(completed=0, failed=0, skipped=skipped, cells=0, refresh=False)
+    timings = {"prepare": 0.0, "render": 0.0, "pack": 0.0}
+    timing_counts = {"prepare": 0, "render": 0, "pack": 0}
+    progress = tqdm(total=len(pending), desc=f"pyramids ({workers} prep workers)", unit="pyramid", dynamic_ncols=True)
+
+    def update_progress(prepare_queued: int, pack_queued: int) -> None:
+        averages = {
+            name: round(timings[name] * 1000 / timing_counts[name]) if timing_counts[name] else 0 for name in timings
+        }
+        progress.set_postfix(
+            completed=successes,
+            failed=failures,
+            skipped=skipped,
+            cells=rendered_cells,
+            prep_ms=averages["prepare"],
+            render_ms=averages["render"],
+            pack_ms=averages["pack"],
+            queued=f"{prepare_queued}/{pack_queued}",
+            refresh=False,
+        )
+
+    def fail_record(record: dict[str, Any], error: Exception) -> None:
+        nonlocal failures
+        append_jsonl(
+            error_manifest,
+            {
+                "parent_id": record["id"],
+                "error_type": type(error).__name__,
+                "error": str(error),
+                "traceback": traceback.format_exc(),
+            },
+        )
+        failures += 1
+        progress.update()
+
+    update_progress(0, 0)
+    prepare_futures: dict[Future[Any], dict[str, Any]] = {}
+    pack_futures: dict[Future[Any], tuple[dict[str, Any], int]] = {}
     try:
-        for record in pending:
-            output_id = pyramid_id(record, config)
-            try:
-                geometry = object_geometry(record, config)
-                sources = _crop_record_sources(record, config, geometry, source_names)
-                requests = [(sources[source_for_width(record, width, config)[0]], width) for width in widths]
-                frames = renderer.render_many(
-                    requests,
-                    font_ratio=config.chuda.font_ratio,
-                    transparent_threshold=config.chuda.transparent_threshold,
-                )
-                levels = []
-                files = []
-                backends = set()
-                for width, frame in zip(widths, frames, strict=True):
-                    data = bytes(frame.to_ansi())
-                    source_name, _ = source_for_width(record, width, config)
-                    path = f"levels/{width:03d}.ansi"
-                    levels.append(
-                        {
-                            "width": width,
-                            "rows": frame.rows,
-                            "source_lod": source_name,
-                            "bytes": len(data),
-                            "sha256": hashlib.sha256(data).hexdigest(),
-                            "path": path,
+        with _pipeline_executors(workers, prepare_futures, pack_futures) as (prepare_executor, pack_executor):
+            remaining = iter(pending)
+
+            def submit_preparation() -> None:
+                while len(prepare_futures) < prepare_limit:
+                    record = next(remaining, None)
+                    if record is None:
+                        break
+                    try:
+                        future = prepare_executor.submit(_prepare_record, record, config, source_names)
+                    except BrokenExecutor as error:
+                        raise StageInfrastructureError(f"Pyramid preparation pool failed: {error}") from error
+                    prepare_futures[future] = record
+
+            def finish_packs(*, block: bool) -> None:
+                nonlocal successes, rendered_cells
+                if not pack_futures:
+                    return
+                if block:
+                    done, _ = wait(pack_futures, return_when=FIRST_COMPLETED)
+                else:
+                    done = {future for future in pack_futures if future.done()}
+                for future in done:
+                    output_record, cells = pack_futures.pop(future)
+                    try:
+                        archive_sha256, elapsed = future.result()
+                        append_jsonl(output_manifest, {**output_record, "archive_sha256": archive_sha256})
+                    except Exception as error:  # noqa: BLE001 - archive failures are stage-wide
+                        raise StageInfrastructureError(f"Pyramid archive infrastructure failed: {error}") from error
+                    timings["pack"] += elapsed
+                    timing_counts["pack"] += 1
+                    successes += 1
+                    rendered_cells += cells
+                    progress.update()
+                    update_progress(len(prepare_futures), len(pack_futures))
+
+            submit_preparation()
+            while prepare_futures:
+                prepared, _ = wait(prepare_futures, return_when=FIRST_COMPLETED)
+                for future in prepared:
+                    record = prepare_futures.pop(future)
+                    output_id = pyramid_id(record, config)
+                    try:
+                        geometry, source_buffers, prepare_elapsed = future.result()
+                        timings["prepare"] += prepare_elapsed
+                        timing_counts["prepare"] += 1
+                        sources = {
+                            name: chuda.Image.from_rgba(width, height, data)
+                            for name, (width, height, data) in source_buffers.items()
                         }
-                    )
-                    files.append((data, path))
-                    backends.add(frame.backend)
-                    rendered_cells += frame.columns * frame.rows
-                metadata = {
-                    "format": PYRAMID_FORMAT,
-                    "id": output_id,
-                    "parent_id": record["id"],
-                    "chuda": config.chuda.model_dump(mode="json"),
-                    "chuda_backends": sorted(backends),
-                    "input_rasterization": rasterizer_signature(),
-                    "geometry": geometry,
-                    "levels": levels,
-                }
-                destination = artifact_path(config.artifact_dir, "pyramids", output_id, ".tar.zst")
-                _write_archive(destination, metadata, files)
-                append_jsonl(
-                    output_manifest,
-                    {
-                        **record,
-                        "id": output_id,
-                        "parent_id": record["id"],
-                        "stage": "pyramid",
-                        "artifact": relative_path(destination, config.data_dir),
-                        "archive_sha256": sha256_file(destination),
-                        "chuda_version": config.chuda.version,
-                        "chuda_backends": metadata["chuda_backends"],
-                        "pyramid_format": metadata["format"],
-                        "input_rasterization": metadata["input_rasterization"],
-                        "geometry": geometry,
-                        "pyramid_levels": levels,
-                    },
-                )
-                successes += 1
-            except (MemoryError, OSError) as error:
-                raise StageInfrastructureError(f"Pyramid infrastructure failed: {error}") from error
-            except RuntimeError as error:
-                if config.chuda.backend == "cuda":
-                    raise StageInfrastructureError(f"Chuda CUDA backend failed: {error}") from error
-                append_jsonl(
-                    error_manifest,
-                    {
-                        "parent_id": record["id"],
-                        "error_type": type(error).__name__,
-                        "error": str(error),
-                        "traceback": traceback.format_exc(),
-                    },
-                )
-                failures += 1
-            except Exception as error:  # noqa: BLE001 - reject only the malformed source record
-                append_jsonl(
-                    error_manifest,
-                    {
-                        "parent_id": record["id"],
-                        "error_type": type(error).__name__,
-                        "error": str(error),
-                        "traceback": traceback.format_exc(),
-                    },
-                )
-                failures += 1
-            progress.update()
-            progress.set_postfix(
-                completed=successes, failed=failures, skipped=skipped, cells=rendered_cells, refresh=False
-            )
+                        requests = [(sources[source_for_width(record, width, config)[0]], width) for width in widths]
+                        render_started = perf_counter()
+                        frames = renderer.render_many(
+                            requests,
+                            font_ratio=config.chuda.font_ratio,
+                            transparent_threshold=config.chuda.transparent_threshold,
+                        )
+                        levels = []
+                        files = []
+                        backends = set()
+                        record_cells = 0
+                        for width, frame in zip(widths, frames, strict=True):
+                            data = bytes(frame.to_ansi())
+                            source_name, _ = source_for_width(record, width, config)
+                            path = f"levels/{width:03d}.ansi"
+                            levels.append(
+                                {
+                                    "width": width,
+                                    "rows": frame.rows,
+                                    "source_lod": source_name,
+                                    "bytes": len(data),
+                                    "sha256": hashlib.sha256(data).hexdigest(),
+                                    "path": path,
+                                }
+                            )
+                            files.append((data, path))
+                            backends.add(frame.backend)
+                            record_cells += frame.columns * frame.rows
+                        timings["render"] += perf_counter() - render_started
+                        timing_counts["render"] += 1
+                        metadata = {
+                            "format": PYRAMID_FORMAT,
+                            "id": output_id,
+                            "parent_id": record["id"],
+                            "chuda": config.chuda.model_dump(mode="json"),
+                            "chuda_backends": sorted(backends),
+                            "input_rasterization": rasterizer_signature(),
+                            "geometry": geometry,
+                            "levels": levels,
+                        }
+                        destination = artifact_path(config.artifact_dir, "pyramids", output_id, ".tar.zst")
+                        while len(pack_futures) >= pack_limit:
+                            finish_packs(block=True)
+                        output_record = {
+                            **record,
+                            "id": output_id,
+                            "parent_id": record["id"],
+                            "stage": "pyramid",
+                            "artifact": relative_path(destination, config.data_dir),
+                            "chuda_version": config.chuda.version,
+                            "chuda_backends": metadata["chuda_backends"],
+                            "pyramid_format": metadata["format"],
+                            "input_rasterization": metadata["input_rasterization"],
+                            "geometry": geometry,
+                            "pyramid_levels": levels,
+                        }
+                        pack_future = pack_executor.submit(_pack_archive, destination, metadata, files)
+                        pack_futures[pack_future] = (output_record, record_cells)
+                        finish_packs(block=False)
+                    except BrokenExecutor as error:
+                        raise StageInfrastructureError(f"Pyramid preparation pool failed: {error}") from error
+                    except (MemoryError, OSError) as error:
+                        raise StageInfrastructureError(f"Pyramid infrastructure failed: {error}") from error
+                    except StageInfrastructureError:
+                        raise
+                    except RuntimeError as error:
+                        if config.chuda.backend == "cuda":
+                            raise StageInfrastructureError(f"Chuda CUDA backend failed: {error}") from error
+                        fail_record(record, error)
+                    except Exception as error:  # noqa: BLE001 - reject only the malformed source record
+                        fail_record(record, error)
+                    submit_preparation()
+                    update_progress(len(prepare_futures), len(pack_futures))
+
+            while pack_futures:
+                finish_packs(block=True)
     finally:
         progress.close()
     return successes, failures, skipped

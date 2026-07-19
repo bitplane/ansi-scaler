@@ -2,6 +2,10 @@ name: smoke
 catalog_dir: catalog
 data_dir: data
 limit: 10
+resources:
+  memory_headroom: 0.2
+  pyramid_worker_memory_mb: 128
+  pyramid_workers: null
 review:
   host: 127.0.0.1
   port: 8765

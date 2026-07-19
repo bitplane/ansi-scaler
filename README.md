@@ -109,6 +109,12 @@ retained in original-canvas coordinates for the training builder.
 The project pins the `chuda-ansi` Python package, which contains both CUDA and
 CPU renderers. Chuda selects CUDA when it is usable and otherwise warns once
 before falling back to CPU; it does not need to be installed globally.
+Source loading, SVG rasterization, and cropping run in a bounded process pool
+while the parent process owns the persistent Chuda renderer and a background
+thread packs the preceding archive. Worker count is automatic from logical CPU
+count and the configured memory headroom; set `resources.pyramid_workers` to
+override it. Progress reports average preparation, rendering, and packing time
+so the active bottleneck remains visible.
 
 ## Reviewing corpus quality
 
