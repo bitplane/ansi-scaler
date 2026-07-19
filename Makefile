@@ -53,15 +53,15 @@ pyramid: .venv/.installed  ## Build compressed ANSI pyramids with the pinned Chu
 	scripts/pyramid.sh $(RUN_CONFIG)
 
 classify: .venv/.installed  ## Classify cutouts with the configured Ollama VLM
-	scripts/classify.sh $(RUN_CONFIG)
+	RETRY_ERRORS=$(RETRY_ERRORS) scripts/classify.sh $(RUN_CONFIG)
 
 verify: .venv/.installed  ## Verify VLM classifications with the configured Ollama LLM
-	scripts/verify.sh $(RUN_CONFIG)
+	RETRY_ERRORS=$(RETRY_ERRORS) scripts/verify.sh $(RUN_CONFIG)
 
 review: .venv/.installed  ## Open the local corpus review and annotation UI
 	scripts/review.sh $(RUN_CONFIG)
 
-corpus: deps  ## Resume the configured corpus through ANSI pyramids
+corpus: deps  ## Resume the configured corpus through VLM classification and LLM verification
 	RETRY_ERRORS=$(RETRY_ERRORS) scripts/corpus.sh $(RUN_CONFIG)
 
 smoke: deps  ## Run ten real samples through all stages (downloads models; CUDA required)

@@ -7,6 +7,7 @@ simplified image LODs:
 ```text
 scene-kit catalogue -> prompts -> Sana raster -> rembg cutout -> VTracer LODs
                                                          -> Chuda ANSI pyramids
+                                      -> VLM classification -> LLM verification
 ```
 
 ## Setup
@@ -60,7 +61,8 @@ make smoke
 ```
 
 This downloads the pinned Sana and rembg models and requires a CUDA GPU. The
-initial 1,200-image run is resumable through compressed ANSI pyramids:
+initial 1,200-image run is resumable through compressed ANSI pyramids, VLM
+classification, and LLM verification:
 
 ```bash
 make corpus

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-uv run --frozen ansi-scaler verify --run-config "${1:-configs/runs/first.yaml}"
+arguments=(verify --run-config "${1:-configs/runs/first.yaml}")
+if [[ "${RETRY_ERRORS:-0}" == "1" ]]; then
+    arguments+=(--retry-errors)
+fi
+uv run --frozen ansi-scaler "${arguments[@]}"

@@ -34,10 +34,10 @@ def _config(path: Path) -> RunConfig:
     return config
 
 
-def _result(stage: str, result: tuple[int, int, int]) -> None:
+def _result(stage: str, result: tuple[int, int, int], *, fail_on_record_errors: bool = True) -> None:
     successes, failures, skipped = result
     typer.echo(f"{stage}: {successes} completed, {failures} failed, {skipped} skipped")
-    if failures:
+    if failures and fail_on_record_errors:
         raise typer.Exit(code=1)
 
 
@@ -176,7 +176,7 @@ def run_pipeline(
     retry_errors: bool = False,
 ) -> None:
     """Run or resume the corpus pipeline through a named stage."""
-    stages = ["prompts", "generate", "rembg", "lod", "pyramid"]
+    stages = ["prompts", "generate", "rembg", "lod", "pyramid", "classify", "verify"]
     if through not in stages:
         raise typer.BadParameter(f"Expected one of: {', '.join(stages)}")
     config = _config(run_config)
@@ -184,13 +184,19 @@ def run_pipeline(
     write_prompt_manifest(config, catalog)
     if through == "prompts":
         return
-    _result("generate", run_generate(config, force=force, retry_errors=retry_errors))
+    _result("generate", run_generate(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
     if through == "generate":
         return
-    _result("rembg", run_rembg(config, force=force, retry_errors=retry_errors))
+    _result("rembg", run_rembg(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
     if through == "rembg":
         return
-    _result("lod", run_lod(config, force=force, retry_errors=retry_errors))
+    _result("lod", run_lod(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
     if through == "lod":
         return
-    _result("pyramid", run_pyramid(config, force=force, retry_errors=retry_errors))
+    _result("pyramid", run_pyramid(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
+    if through == "pyramid":
+        return
+    _result("classify", run_classify(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
+    if through == "classify":
+        return
+    _result("verify", run_verify(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
