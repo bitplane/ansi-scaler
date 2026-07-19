@@ -98,7 +98,7 @@ PNG previews. Intended terminal-width selection is:
 0-9 cells    LOD 3
 10-39 cells  LOD 2
 40-79 cells  LOD 1
-80+ cells    original cutout
+80+ cells    LOD 0
 ```
 
 `make pyramid` renders every integer terminal width from 2 through 120. Each
@@ -111,6 +111,9 @@ rasterized at the original canvas dimensions before the shared integer crop, so
 every source presented to Chuda has identical dimensions and alignment; the small
 LOD PNGs remain review thumbnails only. The bboxes and rasterizer provenance are
 retained in original-canvas coordinates for the training builder.
+LOD 0 is a high-fidelity VTracer conversion used at widths 80 and above, so the
+entire ANSI pyramid is rendered from one SVG-derived representation family; the
+original cutout is retained only for geometry and provenance.
 The project pins the `chuda-ansi` Python package, which contains both CUDA and
 CPU renderers. Chuda selects CUDA when it is usable and otherwise warns once
 before falling back to CPU; it does not need to be installed globally.
@@ -141,6 +144,9 @@ while `1:1` preserves 8×16 terminal cells and allows scrolling. The canvas rend
 geometrically synthesizes block, braille, sextant, wedge, and legacy-bar glyphs so coloured cells
 remain seamless; ordinary text uses the bundled terminal-symbol font. The
 initial width is 40 and browser-local preferences persist between samples.
+Raster and SVG-preview stages default to the same fitted display footprint for
+direct comparison. Use `Native pixels` to inspect their actual preview sizes;
+keys `0`–`3` select the corresponding LOD.
 
 Pipeline manifests remain immutable. Human actions are appended to
 `data/runs/<run>/reviews/annotations.jsonl`; the neighbouring SQLite database is

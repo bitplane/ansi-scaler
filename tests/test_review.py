@@ -221,6 +221,8 @@ def test_review_web_routes_and_safe_media(tmp_path: Path) -> None:
         assert review_response.status_code == 200
         assert 'id="ansi-stage" class="selected"' in review_response.text
         assert 'id="ansi-width" type="range" min="40" max="40" value="40"' in review_response.text
+        assert 'data-mode="normalized" aria-pressed="true">Same size' in review_response.text
+        assert 'data-mode="native" aria-pressed="false">Native pixels' in review_response.text
         assert "review.css?v=" in review_response.text
         assert "review.js?v=" in review_response.text
         ansi_response = client.get("/api/pyramids/pyramid-1/levels/40")

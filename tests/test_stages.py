@@ -91,8 +91,8 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
     assert verification["verification"]["decision"] == "accept"
 
     record = next(read_jsonl(config.manifest_dir / "lods.jsonl"))
-    assert [level["name"] for level in record["levels"]] == ["lod-1", "lod-2", "lod-3"]
-    assert [level["preview_size"] for level in record["levels"]] == [128, 64, 32]
+    assert [level["name"] for level in record["levels"]] == ["lod-0", "lod-1", "lod-2", "lod-3"]
+    assert [level["preview_size"] for level in record["levels"]] == [512, 128, 64, 32]
     for level in record["levels"]:
         assert (config.data_dir / level["svg"]).exists()
         preview = Image.open(config.data_dir / level["preview"])
@@ -152,6 +152,7 @@ def test_pyramid_selects_lod_source_by_width(tmp_path: Path) -> None:
             {"name": "lod-1", "svg": "lod-1.svg", "preview": "lod-1.png"},
             {"name": "lod-2", "svg": "lod-2.svg", "preview": "lod-2.png"},
             {"name": "lod-3", "svg": "lod-3.svg", "preview": "lod-3.png"},
+            {"name": "lod-0", "svg": "lod-0.svg", "preview": "lod-0.png"},
         ],
     }
 
@@ -159,7 +160,7 @@ def test_pyramid_selects_lod_source_by_width(tmp_path: Path) -> None:
     assert source_for_width(record, 9, config) == ("lod-3", tmp_path / "lod-3.svg")
     assert source_for_width(record, 10, config) == ("lod-2", tmp_path / "lod-2.svg")
     assert source_for_width(record, 40, config) == ("lod-1", tmp_path / "lod-1.svg")
-    assert source_for_width(record, 80, config) == ("original", tmp_path / "original.png")
+    assert source_for_width(record, 80, config) == ("lod-0", tmp_path / "lod-0.svg")
 
 
 def test_pyramid_identity_includes_renderer_version() -> None:
@@ -237,14 +238,14 @@ def test_pyramid_prepares_identically_sized_shared_crops(tmp_path: Path) -> None
     image.save(original)
     svg = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80"><rect x="20" y="10" width="40" height="40" fill="green"/></svg>'
     levels = []
-    for name in ("lod-1", "lod-2", "lod-3"):
+    for name in ("lod-0", "lod-1", "lod-2", "lod-3"):
         path = config.data_dir / f"{name}.svg"
         path.write_text(svg)
         levels.append({"name": name, "svg": path.relative_to(config.data_dir).as_posix()})
     record = {"id": "lod-record", "original": "original.png", "levels": levels}
 
     geometry = object_geometry(record, config)
-    sources = _crop_record_sources(record, config, geometry, ("lod-3", "lod-2", "lod-1", "original"))
+    sources = _crop_record_sources(record, config, geometry, ("lod-3", "lod-2", "lod-1", "lod-0"))
 
     assert geometry["render_bbox_px"] == [18, 8, 62, 52]
     assert geometry["render_size_px"] == [44, 44]
@@ -264,7 +265,7 @@ def test_pyramid_renders_and_packs_one_record_without_staging_tree(tmp_path: Pat
     Image.new("RGBA", (16, 16), (20, 40, 60, 255)).save(original)
     svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#14283c"/></svg>'
     levels = []
-    for name in ("lod-1", "lod-2", "lod-3"):
+    for name in ("lod-0", "lod-1", "lod-2", "lod-3"):
         path = config.data_dir / f"{name}.svg"
         path.write_text(svg)
         levels.append({"name": name, "svg": path.relative_to(config.data_dir).as_posix()})
@@ -297,7 +298,7 @@ def test_pyramid_continues_after_malformed_prepared_record(tmp_path: Path) -> No
         original.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGBA", (16, 16), color).save(original)
         levels = []
-        for name in ("lod-1", "lod-2", "lod-3"):
+        for name in ("lod-0", "lod-1", "lod-2", "lod-3"):
             path = config.data_dir / f"{record_id}-{name}.svg"
             path.write_text(
                 '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">'
@@ -330,7 +331,7 @@ def test_pyramid_archive_failure_is_infrastructure_error(tmp_path: Path, monkeyp
     original.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGBA", (16, 16), (20, 40, 60, 255)).save(original)
     levels = []
-    for name in ("lod-1", "lod-2", "lod-3"):
+    for name in ("lod-0", "lod-1", "lod-2", "lod-3"):
         path = config.data_dir / f"{name}.svg"
         path.write_text(
             '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">'

@@ -52,7 +52,7 @@ def source_for_width(record: dict[str, Any], width: int, config: RunConfig) -> t
     elif width < settings.lod_1_below:
         level_name = "lod-1"
     else:
-        return "original", resolve_path(record["original"], config.data_dir)
+        level_name = "lod-0"
     level = next(level for level in record["levels"] if level["name"] == level_name)
     return level_name, resolve_path(level["svg"], config.data_dir)
 

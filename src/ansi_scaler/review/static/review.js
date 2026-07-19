@@ -2,7 +2,10 @@
   const shell = document.querySelector('.review-shell');
   if (!shell) return;
   const image = document.querySelector('#review-image');
+  const imagePanel = document.querySelector('#image-panel');
   const imageLabel = document.querySelector('#image-label');
+  const rasterMode = document.querySelector('#raster-mode');
+  const rasterModes = document.querySelectorAll('#raster-mode [data-mode]');
   const ansiStage = document.querySelector('#ansi-stage');
   const ansiView = document.querySelector('#ansi-view');
   const ansiViewport = document.querySelector('#ansi-viewport');
@@ -74,6 +77,13 @@
     ansiModes.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === displayMode)));
     localStorage.setItem('ansi-review-display-mode', displayMode);
     requestAnimationFrame(sizeTerminal);
+  }
+
+  function setRasterMode(mode) {
+    const normalized = mode !== 'native';
+    imagePanel?.classList.toggle('normalized-raster', normalized);
+    rasterModes.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === (normalized ? 'normalized' : 'native'))));
+    localStorage.setItem('ansi-review-raster-mode', normalized ? 'normalized' : 'native');
   }
 
   function paletteColour(palette, index, fallback = '#000000') {
@@ -362,6 +372,7 @@
     if (!ansiView) return;
     image?.classList.add('hidden');
     ansiView.classList.remove('hidden');
+    rasterMode?.classList.add('hidden');
     document.querySelectorAll('.stage-rail button').forEach(item => item.classList.remove('selected'));
     ansiStage.classList.add('selected');
     loadAnsi(ansiSlider.value, {stop: false});
@@ -374,6 +385,7 @@
     image.src = button.dataset.image;
     image.classList.remove('hidden');
     ansiView?.classList.add('hidden');
+    rasterMode?.classList.remove('hidden');
     imageLabel.textContent = button.dataset.label;
     document.querySelectorAll('.stage-rail button').forEach(item => item.classList.remove('selected'));
     button.classList.add('selected');
@@ -413,6 +425,7 @@
     scrubTimer = setTimeout(() => loadAnsi(ansiSlider.value), 45);
   });
   ansiModes.forEach(button => button.addEventListener('click', () => setDisplayMode(button.dataset.mode)));
+  rasterModes.forEach(button => button.addEventListener('click', () => setRasterMode(button.dataset.mode)));
   ansiPlay?.addEventListener('click', async () => {
     if (playing) {
       stopPlayback();
@@ -462,7 +475,7 @@
       const cutout = document.querySelector('.stage-rail button[data-label="rembg cutout"]');
       selectImage(generated?.classList.contains('selected') ? cutout : generated);
     }
-    else if (['1', '2', '3'].includes(key)) selectImage(document.querySelectorAll('.stage-rail button[data-label^="LOD"]')[Number(key) - 1]);
+    else if (['0', '1', '2', '3'].includes(key)) selectImage(document.querySelector(`.stage-rail button[data-lod="lod-${key}"]`));
     else if (key === 'p' && ansiView && !ansiView.classList.contains('hidden')) ansiPlay?.click();
     else if (key === '[' && ansiView && !ansiView.classList.contains('hidden')) loadAnsi(Number(ansiSlider.value) - 1);
     else if (key === ']' && ansiView && !ansiView.classList.contains('hidden')) loadAnsi(Number(ansiSlider.value) + 1);
@@ -473,6 +486,7 @@
     else if (event.key === 'Escape') rejectPanel.classList.add('hidden');
   });
 
+  setRasterMode(localStorage.getItem('ansi-review-raster-mode') || 'normalized');
   if (ansiView) {
     const remembered = Number(localStorage.getItem('ansi-review-width') || 40);
     ansiSlider.value = Math.max(Number(ansiView.dataset.minWidth), Math.min(Number(ansiView.dataset.maxWidth), remembered));

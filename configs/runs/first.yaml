@@ -59,6 +59,16 @@ chuda:
   crop_padding_fraction: 0.05
 lod:
   levels:
+    - name: lod-0
+      preview_size: 512
+      min_cells: 80
+      max_cells: 120
+      filter_speckle: 1
+      color_precision: 8
+      layer_difference: 4
+      length_threshold: 2.0
+      corner_threshold: 60
+      splice_threshold: 50
     - name: lod-1
       preview_size: 128
       min_cells: 40
