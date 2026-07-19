@@ -1,7 +1,8 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
-	catalog prompts generate rembg lod pyramid classify verify review corpus smoke
+	deps catalog prompts generate rembg lod pyramid classify verify review corpus smoke
 
 RUN_CONFIG ?= configs/runs/first.yaml
+RETRY_ERRORS ?= 0
 
 all: dev test lint  ## Prepare the project and run all local checks
 
@@ -30,13 +31,16 @@ format: .venv/.installed-dev  ## Format and auto-fix Python code
 clean:  ## Remove the venv and local caches, but never corpus data
 	scripts/clean.sh
 
+deps: .venv/.installed  ## Check host build tools, Python headers, CUDA, and GPU runtimes
+	scripts/check-deps.sh
+
 catalog: .venv/.installed  ## Validate the committed concept catalogue
 	scripts/catalog.sh $(RUN_CONFIG)
 
 prompts: .venv/.installed  ## Build a deterministic prompt manifest
 	scripts/prompts.sh $(RUN_CONFIG)
 
-generate: .venv/.installed  ## Generate Sana rasters (downloads model; CUDA required)
+generate: deps  ## Generate Sana rasters (downloads model; CUDA required)
 	scripts/generate.sh $(RUN_CONFIG)
 
 rembg: .venv/.installed  ## Remove raster backgrounds with the configured model
@@ -57,11 +61,11 @@ verify: .venv/.installed  ## Verify VLM classifications with the configured Olla
 review: .venv/.installed  ## Open the local corpus review and annotation UI
 	scripts/review.sh $(RUN_CONFIG)
 
-corpus: .venv/.installed .tools/.chuda-0.1.1  ## Resume the configured corpus through ANSI pyramids
-	scripts/corpus.sh $(RUN_CONFIG)
+corpus: deps .tools/.chuda-0.1.1  ## Resume the configured corpus through ANSI pyramids
+	RETRY_ERRORS=$(RETRY_ERRORS) scripts/corpus.sh $(RUN_CONFIG)
 
-smoke: .venv/.installed .tools/.chuda-0.1.1  ## Run ten real samples through all stages (downloads models; CUDA required)
-	scripts/corpus.sh configs/runs/smoke.yaml
+smoke: deps .tools/.chuda-0.1.1  ## Run ten real samples through all stages (downloads models; CUDA required)
+	RETRY_ERRORS=$(RETRY_ERRORS) scripts/corpus.sh configs/runs/smoke.yaml
 
 .venv/.installed: pyproject.toml uv.lock .venv/.created scripts/install.sh
 	scripts/install.sh

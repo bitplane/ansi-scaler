@@ -16,6 +16,10 @@ Processor = Callable[[dict[str, Any]], dict[str, Any]]
 IdBuilder = Callable[[dict[str, Any]], str]
 
 
+class StageInfrastructureError(RuntimeError):
+    """A stage-wide dependency or runtime failure that cannot be fixed by trying another item."""
+
+
 def _error_record(parent_id: str, error: Exception) -> dict[str, str]:
     return {
         "parent_id": parent_id,
@@ -76,6 +80,8 @@ def run_stage(
                 append_jsonl(output_manifest, result)
                 completed.add(result["id"])
                 successes += 1
+            except StageInfrastructureError:
+                raise
             except Exception as error:  # noqa: BLE001 - batch processing must preserve later records
                 append_jsonl(error_manifest, _error_record(parent_id, error))
                 failures += 1
@@ -159,6 +165,8 @@ def run_parallel_stage(
                     append_jsonl(output_manifest, result)
                     completed.add(result["id"])
                     successes += 1
+                except StageInfrastructureError:
+                    raise
                 except Exception as error:  # noqa: BLE001 - batch processing must preserve later records
                     append_jsonl(error_manifest, _error_record(source["id"], error))
                     failures += 1

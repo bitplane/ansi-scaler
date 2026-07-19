@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl
-from ansi_scaler.runner import run_stage
+from ansi_scaler.runner import StageInfrastructureError, run_stage
 
 
 VERIFIER_PROMPT = """You are a conservative quality gate for a synthetic game-art corpus.
@@ -77,7 +77,12 @@ class OllamaVerifier:
                 {"role": "user", "content": json.dumps(evidence, sort_keys=True)},
             ],
         }
-        response = self.request_function(payload)
+        try:
+            response = self.request_function(payload)
+        except OSError as error:
+            raise StageInfrastructureError(
+                f"LLM server {self.settings.endpoint} is unavailable; restore it and resume verification"
+            ) from error
         self.used_model = True
         verification = Verification.model_validate_json(response["message"]["content"])
         observations = source["classification"]

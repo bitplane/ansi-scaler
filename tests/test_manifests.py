@@ -1,7 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 from ansi_scaler.manifests import read_jsonl
-from ansi_scaler.runner import run_parallel_stage, run_stage
+from ansi_scaler.runner import StageInfrastructureError, run_parallel_stage, run_stage
 
 
 def parallel_processor(source: dict) -> dict:
@@ -55,3 +57,27 @@ def test_parallel_stage_writes_manifest_in_parent(tmp_path: Path) -> None:
     assert run_parallel_stage(inputs, output, errors, parallel_processor, parallel_id, workers=4) == (8, 0, 0)
     assert {record["id"] for record in read_jsonl(output)} == {f"out-{index}" for index in range(8)}
     assert run_parallel_stage(inputs, output, errors, parallel_processor, parallel_id, workers=4) == (0, 0, 8)
+
+
+def test_infrastructure_failure_aborts_without_poisoning_manifest(tmp_path: Path) -> None:
+    output = tmp_path / "output.jsonl"
+    errors = tmp_path / "errors.jsonl"
+    attempted = []
+
+    def processor(source: dict) -> dict:
+        attempted.append(source["id"])
+        raise StageInfrastructureError("Python.h is missing")
+
+    with pytest.raises(StageInfrastructureError, match="Python.h"):
+        run_stage(
+            [{"id": "one"}, {"id": "two"}],
+            output,
+            errors,
+            processor,
+            parallel_id,
+            show_progress=False,
+        )
+
+    assert attempted == ["one"]
+    assert not output.exists()
+    assert not errors.exists()

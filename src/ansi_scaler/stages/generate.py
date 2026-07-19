@@ -10,7 +10,7 @@ from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl, relative_path, resolve_path
 from ansi_scaler.reports import contact_sheet
-from ansi_scaler.runner import run_stage
+from ansi_scaler.runner import StageInfrastructureError, run_stage
 
 
 class SanaGenerator:
@@ -68,15 +68,20 @@ class SanaGenerator:
             destination.unlink(missing_ok=True)
         if not destination.exists():
             generator = torch.Generator(device=self.settings.device).manual_seed(source["seed"])
-            image: Image.Image = self._load_pipeline()(
-                prompt=source["prompt"],
-                negative_prompt=source["negative_prompt"],
-                height=self.settings.height,
-                width=self.settings.width,
-                guidance_scale=self.settings.guidance_scale,
-                num_inference_steps=self.settings.inference_steps,
-                generator=generator,
-            ).images[0]
+            try:
+                image: Image.Image = self._load_pipeline()(
+                    prompt=source["prompt"],
+                    negative_prompt=source["negative_prompt"],
+                    height=self.settings.height,
+                    width=self.settings.width,
+                    guidance_scale=self.settings.guidance_scale,
+                    num_inference_steps=self.settings.inference_steps,
+                    generator=generator,
+                ).images[0]
+            except Exception as error:
+                raise StageInfrastructureError(
+                    "Sana could not initialise or run on this machine; fix the reported dependency/CUDA error and resume"
+                ) from error
             with atomic_destination(destination) as temporary:
                 image.save(temporary, format="PNG")
         return {

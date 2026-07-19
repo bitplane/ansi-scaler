@@ -14,7 +14,7 @@ from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl, resolve_path
 from ansi_scaler.reports import checkerboard
-from ansi_scaler.runner import run_stage
+from ansi_scaler.runner import StageInfrastructureError, run_stage
 
 
 CLASSIFIER_PROMPT = """Inspect this isolated game-art cutout rendered over a checkerboard.
@@ -91,7 +91,12 @@ class OllamaClassifier:
                 }
             ],
         }
-        response = self.request_function(payload)
+        try:
+            response = self.request_function(payload)
+        except OSError as error:
+            raise StageInfrastructureError(
+                f"VLM server {self.settings.endpoint} is unavailable; restore it and resume classification"
+            ) from error
         self.used_model = True
         classification = Classification.model_validate_json(response["message"]["content"])
         return {

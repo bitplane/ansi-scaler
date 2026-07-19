@@ -10,7 +10,7 @@ from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import sha256_file, stable_id
 from ansi_scaler.manifests import read_jsonl, relative_path, resolve_path
 from ansi_scaler.reports import contact_sheet
-from ansi_scaler.runner import run_stage
+from ansi_scaler.runner import StageInfrastructureError, run_stage
 
 
 class BackgroundRemover:
@@ -71,9 +71,14 @@ class BackgroundRemover:
         if self.force:
             destination.unlink(missing_ok=True)
         if not destination.exists():
-            session, remove_function = self._load_model()
             image = Image.open(source_path).convert("RGBA")
-            cutout = remove_function(image, session=session, alpha_matting=False)
+            try:
+                session, remove_function = self._load_model()
+                cutout = remove_function(image, session=session, alpha_matting=False)
+            except Exception as error:
+                raise StageInfrastructureError(
+                    "rembg could not initialise or run; fix the reported model, memory, or CUDA error and resume"
+                ) from error
             with atomic_destination(destination) as temporary:
                 cutout.save(temporary, format="PNG")
 

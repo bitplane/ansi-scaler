@@ -22,6 +22,26 @@ make help
 
 `make clean` never removes corpus data.
 
+### System dependencies
+
+The locked Python environment does not replace host compilers, Python headers,
+the NVIDIA driver, Rust, or `zstd`. On Ubuntu, the baseline packages are:
+
+```bash
+sudo apt install build-essential python3.12-dev zstd
+```
+
+Install Rust with `rustup`, and install an NVIDIA driver supported by the locked
+PyTorch build. Check the complete host before starting an expensive run:
+
+```bash
+make deps
+```
+
+This verifies the C/C++ compiler, `Python.h`, Cargo, zstd, NVIDIA driver access,
+PyTorch CUDA, and ONNX Runtime's CUDA provider. `make corpus` and `make smoke`
+run the same guard automatically.
+
 ## Running the corpus
 
 Validate and build prompts without downloading a model:
@@ -42,6 +62,14 @@ initial 1,200-image run is resumable through compressed ANSI pyramids:
 
 ```bash
 make corpus
+```
+
+Infrastructure failures abort a stage immediately and are not recorded as bad
+samples. If an older run already filled an error manifest because a dependency
+was missing, fix the dependency and explicitly reconsider those records with:
+
+```bash
+make corpus RETRY_ERRORS=1
 ```
 
 Choose another recipe with `RUN_CONFIG=configs/runs/example.yaml`. Generated
