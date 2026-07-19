@@ -92,14 +92,23 @@ data, never catalogue source. The first catalogue contains woodland, village,
 city, castle, and spaceport kits with 24 memberships each.
 
 The LOD stage retains the transparent original plus canonical SVGs and small
-PNG previews. Intended terminal-width selection is:
+PNG previews. Pyramid v3 cross-fades aligned, shared-crop LOD rasters before
+Chuda chooses categorical ANSI cells. The higher-detail contribution rises in
+12.5% steps through fixed four-cell transition windows:
 
 ```text
-0-9 cells    LOD 3
-10-39 cells  LOD 2
-40-79 cells  LOD 1
-80+ cells    LOD 0
+2-5 cells     LOD 3
+6-14 cells    LOD 3 → LOD 2, midpoint 10
+15-35 cells   LOD 2
+36-44 cells   LOD 2 → LOD 1, midpoint 40
+45-75 cells   LOD 1
+76-84 cells   LOD 1 → LOD 0, midpoint 80
+85-120 cells  LOD 0
 ```
+
+Cross-fades use premultiplied sRGB so transparent pixels cannot leak hidden
+colour into object edges. Blend rasters are ephemeral preparation buffers;
+archives contain only ANSI levels and their exact weighted LOD provenance.
 
 `make pyramid` renders every integer terminal width from 2 through 120. Each
 source image becomes an independently resumable `.tar.zst` containing the ANSI

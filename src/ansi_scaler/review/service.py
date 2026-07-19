@@ -274,10 +274,14 @@ class ReviewService:
         if not archive_path.is_relative_to(data_root) or not archive_path.is_file():
             raise KeyError(record_id)
         data = self.pyramid_cache.level(record, archive_path, width)
+        source_lods = level.get("source_lods")
+        if source_lods is None:
+            source_lods = [{"name": level["source_lod"], "weight": 1.0}]
         return {
             "width": width,
             "rows": level["rows"],
             "source_lod": level["source_lod"],
+            "source_lods": source_lods,
             **ansi_to_runs(data, width=width, rows=level["rows"]),
         }
 

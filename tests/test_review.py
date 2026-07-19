@@ -129,6 +129,7 @@ def add_pyramid(config: RunConfig) -> None:
                         "width": 40,
                         "rows": 1,
                         "source_lod": "lod-1",
+                        "source_lods": [{"name": "lod-1", "weight": 1.0}],
                         "bytes": len(data),
                         "sha256": hashlib.sha256(data).hexdigest(),
                         "path": "levels/040.ansi",
@@ -180,6 +181,20 @@ def test_review_uses_current_pyramid_format(tmp_path: Path) -> None:
     service = ReviewService(config)
 
     assert service.samples()[0]["pyramid"]["id"] == "pyramid-1"
+    service.close()
+
+
+def test_review_normalises_legacy_single_lod_provenance(tmp_path: Path) -> None:
+    config = review_config(tmp_path)
+    add_pyramid(config)
+    manifest = config.manifest_dir / "pyramids.jsonl"
+    record = next(read_jsonl(manifest))
+    record["pyramid_levels"][0].pop("source_lods")
+    write_jsonl(manifest, [record])
+
+    service = ReviewService(config)
+
+    assert service.pyramid_level("pyramid-1", 40)["source_lods"] == [{"name": "lod-1", "weight": 1.0}]
     service.close()
 
 
@@ -253,6 +268,7 @@ def test_review_web_routes_and_safe_media(tmp_path: Path) -> None:
         assert ansi_response.status_code == 200
         assert ansi_response.json()["palette"] == [[10, 20, 30], [40, 50, 60]]
         assert ansi_response.json()["runs"][0] == ["▃" + (" " * 39), 0, 1]
+        assert ansi_response.json()["source_lods"] == [{"name": "lod-1", "weight": 1.0}]
         assert "html" not in ansi_response.json()
         assert client.get("/api/pyramids/pyramid-1/levels/41").status_code == 404
         assert client.get("/api/pyramids/cutout-1/levels/40").status_code == 404

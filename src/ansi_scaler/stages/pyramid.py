@@ -29,8 +29,9 @@ from ansi_scaler.manifests import append_jsonl, known_ids, read_jsonl, relative_
 from ansi_scaler.runner import StageInfrastructureError
 
 
-PYRAMID_FORMAT = "ansi-scaler-pyramid-v2"
-INPUT_RASTERIZATION_CONTRACT = "shared-crop-rgba-v1"
+PYRAMID_FORMAT = "ansi-scaler-pyramid-v3"
+INPUT_RASTERIZATION_CONTRACT = "shared-crop-premultiplied-lod-blend-v2"
+LOD_BLEND_RADIUS = 4
 
 
 @lru_cache(maxsize=1)
@@ -43,8 +44,24 @@ def rasterizer_signature() -> dict[str, str]:
     }
 
 
-def source_for_width(record: dict[str, Any], width: int, config: RunConfig) -> tuple[str, Path]:
+def source_for_width(record: dict[str, Any], width: int, config: RunConfig) -> tuple[tuple[str, Path, float], ...]:
     settings = config.chuda
+    transitions = (
+        ("lod-3", "lod-2", settings.lod_3_below),
+        ("lod-2", "lod-1", settings.lod_2_below),
+        ("lod-1", "lod-0", settings.lod_1_below),
+    )
+
+    def source(name: str, weight: float) -> tuple[str, Path, float]:
+        level = next(level for level in record["levels"] if level["name"] == name)
+        return name, resolve_path(level["svg"], config.data_dir), weight
+
+    for lower, higher, boundary in transitions:
+        start = boundary - LOD_BLEND_RADIUS
+        end = boundary + LOD_BLEND_RADIUS
+        if start < width < end:
+            higher_weight = (width - start) / (2 * LOD_BLEND_RADIUS)
+            return source(lower, 1.0 - higher_weight), source(higher, higher_weight)
     if width < settings.lod_3_below:
         level_name = "lod-3"
     elif width < settings.lod_2_below:
@@ -53,8 +70,28 @@ def source_for_width(record: dict[str, Any], width: int, config: RunConfig) -> t
         level_name = "lod-1"
     else:
         level_name = "lod-0"
-    level = next(level for level in record["levels"] if level["name"] == level_name)
-    return level_name, resolve_path(level["svg"], config.data_dir)
+    return (source(level_name, 1.0),)
+
+
+def _source_key(width: int, sources: tuple[tuple[str, Path, float], ...]) -> str:
+    return sources[0][0] if len(sources) == 1 else f"blend-{width:03d}"
+
+
+def _source_provenance(sources: tuple[tuple[str, Path, float], ...]) -> list[dict[str, Any]]:
+    return [{"name": name, "weight": weight} for name, _path, weight in sources]
+
+
+def _blend_rgba_buffers(
+    lower: tuple[int, int, bytes], higher: tuple[int, int, bytes], higher_weight: float
+) -> tuple[int, int, bytes]:
+    lower_width, lower_height, lower_data = lower
+    higher_width, higher_height, higher_data = higher
+    if (lower_width, lower_height) != (higher_width, higher_height):
+        raise ValueError("LOD blend sources do not share identical dimensions")
+    lower_image = Image.frombytes("RGBA", (lower_width, lower_height), lower_data).convert("RGBa")
+    higher_image = Image.frombytes("RGBA", (higher_width, higher_height), higher_data).convert("RGBa")
+    blended = Image.blend(lower_image, higher_image, higher_weight).convert("RGBA")
+    return blended.width, blended.height, blended.tobytes()
 
 
 def pyramid_id(record: dict[str, Any], config: RunConfig) -> str:
@@ -187,11 +224,17 @@ def _crop_record_sources(
 
 
 def _prepare_record(
-    record: dict[str, Any], config: RunConfig, source_names: tuple[str, ...]
+    record: dict[str, Any], config: RunConfig, widths: tuple[int, ...]
 ) -> tuple[dict[str, Any], dict[str, tuple[int, int, bytes]], float]:
     started = perf_counter()
     geometry = object_geometry(record, config)
+    mixes = {width: source_for_width(record, width, config) for width in widths}
+    source_names = tuple(dict.fromkeys(source[0] for sources in mixes.values() for source in sources))
     sources = _crop_record_source_buffers(record, config, geometry, source_names)
+    for width, mix in mixes.items():
+        if len(mix) == 1:
+            continue
+        sources[_source_key(width, mix)] = _blend_rgba_buffers(sources[mix[0][0]], sources[mix[1][0]], mix[1][2])
     return geometry, sources, perf_counter() - started
 
 
@@ -230,6 +273,9 @@ def run_pyramid(
         raise ValueError("chuda.min_width must not exceed chuda.max_width")
     if not config.chuda.lod_3_below < config.chuda.lod_2_below < config.chuda.lod_1_below:
         raise ValueError("Chuda LOD thresholds must be strictly increasing")
+    boundaries = (config.chuda.lod_3_below, config.chuda.lod_2_below, config.chuda.lod_1_below)
+    if any(higher - lower < 2 * LOD_BLEND_RADIUS for lower, higher in zip(boundaries, boundaries[1:])):
+        raise ValueError("Chuda LOD boundaries are too close for the fixed blend radius")
     output_manifest = config.manifest_dir / "pyramids.jsonl"
     error_manifest = config.manifest_dir / "pyramids.errors.jsonl"
     if force:
@@ -254,7 +300,6 @@ def run_pyramid(
 
     _check_chuda(config)
     widths = tuple(range(config.chuda.min_width, config.chuda.max_width + 1))
-    source_names = tuple(dict.fromkeys(source_for_width(pending[0], width, config)[0] for width in widths))
     renderer = chuda.Renderer(config.chuda.backend, config.chuda.max_batch_cells)
     workers = min(pyramid_worker_count(config), len(pending))
     prepare_limit, pack_limit = pyramid_queue_limits(workers)
@@ -309,7 +354,7 @@ def run_pyramid(
                     if record is None:
                         break
                     try:
-                        future = prepare_executor.submit(_prepare_record, record, config, source_names)
+                        future = prepare_executor.submit(_prepare_record, record, config, widths)
                     except BrokenExecutor as error:
                         raise StageInfrastructureError(f"Pyramid preparation pool failed: {error}") from error
                     prepare_futures[future] = record
@@ -350,7 +395,8 @@ def run_pyramid(
                             name: chuda.Image.from_rgba(width, height, data)
                             for name, (width, height, data) in source_buffers.items()
                         }
-                        requests = [(sources[source_for_width(record, width, config)[0]], width) for width in widths]
+                        width_sources = {width: source_for_width(record, width, config) for width in widths}
+                        requests = [(sources[_source_key(width, width_sources[width])], width) for width in widths]
                         render_started = perf_counter()
                         frames = renderer.render_many(
                             requests,
@@ -363,13 +409,15 @@ def run_pyramid(
                         record_cells = 0
                         for width, frame in zip(widths, frames, strict=True):
                             data = bytes(frame.to_ansi())
-                            source_name, _ = source_for_width(record, width, config)
+                            source_mix = width_sources[width]
+                            source_lods = _source_provenance(source_mix)
                             path = f"levels/{width:03d}.ansi"
                             levels.append(
                                 {
                                     "width": width,
                                     "rows": frame.rows,
-                                    "source_lod": source_name,
+                                    "source_lod": "/".join(source["name"] for source in source_lods),
+                                    "source_lods": source_lods,
                                     "bytes": len(data),
                                     "sha256": hashlib.sha256(data).hexdigest(),
                                     "path": path,

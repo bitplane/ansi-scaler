@@ -12,8 +12,12 @@ from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.classify import Classification, run_classify
 from ansi_scaler.stages.lod import run_lod
 from ansi_scaler.stages.pyramid import (
+    INPUT_RASTERIZATION_CONTRACT,
+    LOD_BLEND_RADIUS,
     PYRAMID_FORMAT,
+    _blend_rgba_buffers,
     _crop_record_sources,
+    _prepare_record,
     object_geometry,
     pyramid_id,
     pyramid_queue_limits,
@@ -156,11 +160,41 @@ def test_pyramid_selects_lod_source_by_width(tmp_path: Path) -> None:
         ],
     }
 
-    assert source_for_width(record, 2, config) == ("lod-3", tmp_path / "lod-3.svg")
-    assert source_for_width(record, 9, config) == ("lod-3", tmp_path / "lod-3.svg")
-    assert source_for_width(record, 10, config) == ("lod-2", tmp_path / "lod-2.svg")
-    assert source_for_width(record, 40, config) == ("lod-1", tmp_path / "lod-1.svg")
-    assert source_for_width(record, 80, config) == ("lod-0", tmp_path / "lod-0.svg")
+    def weights(width: int) -> list[tuple[str, float]]:
+        return [(name, weight) for name, _path, weight in source_for_width(record, width, config)]
+
+    assert LOD_BLEND_RADIUS == 4
+    assert weights(2) == [("lod-3", 1.0)]
+    assert weights(6) == [("lod-3", 1.0)]
+    assert weights(7) == [("lod-3", 0.875), ("lod-2", 0.125)]
+    assert weights(8) == [("lod-3", 0.75), ("lod-2", 0.25)]
+    assert weights(10) == [("lod-3", 0.5), ("lod-2", 0.5)]
+    assert weights(13) == [("lod-3", 0.125), ("lod-2", 0.875)]
+    assert weights(14) == [("lod-2", 1.0)]
+    assert weights(36) == [("lod-2", 1.0)]
+    assert weights(40) == [("lod-2", 0.5), ("lod-1", 0.5)]
+    assert weights(44) == [("lod-1", 1.0)]
+    assert weights(76) == [("lod-1", 1.0)]
+    assert weights(80) == [("lod-1", 0.5), ("lod-0", 0.5)]
+    assert weights(84) == [("lod-0", 1.0)]
+    assert weights(120) == [("lod-0", 1.0)]
+    for lower, higher, boundary in (("lod-3", "lod-2", 10), ("lod-2", "lod-1", 40), ("lod-1", "lod-0", 80)):
+        for offset in range(-LOD_BLEND_RADIUS + 1, LOD_BLEND_RADIUS):
+            higher_weight = (offset + LOD_BLEND_RADIUS) / (2 * LOD_BLEND_RADIUS)
+            assert weights(boundary + offset) == [
+                (lower, 1.0 - higher_weight),
+                (higher, higher_weight),
+            ]
+
+
+def test_pyramid_blends_premultiplied_rgba_without_transparent_colour_leak() -> None:
+    lower = (1, 1, bytes((0, 0, 255, 0)))
+    higher = (1, 1, bytes((255, 0, 0, 255)))
+
+    width, height, data = _blend_rgba_buffers(lower, higher, 0.5)
+
+    assert (width, height) == (1, 1)
+    assert tuple(data) == (255, 0, 0, 127)
 
 
 def test_pyramid_identity_includes_renderer_version() -> None:
@@ -170,7 +204,8 @@ def test_pyramid_identity_includes_renderer_version() -> None:
     config.chuda.version = "0.1.2"
 
     assert pyramid_id(record, config) != first
-    assert PYRAMID_FORMAT == "ansi-scaler-pyramid-v2"
+    assert PYRAMID_FORMAT == "ansi-scaler-pyramid-v3"
+    assert INPUT_RASTERIZATION_CONTRACT == "shared-crop-premultiplied-lod-blend-v2"
 
 
 def test_pyramid_identity_does_not_depend_on_backend() -> None:
@@ -208,6 +243,15 @@ def test_pyramid_worker_count_keeps_one_worker_under_memory_pressure(monkeypatch
     )
 
     assert pyramid_worker_count(config) == 1
+
+
+def test_pyramid_rejects_overlapping_lod_blend_windows(tmp_path: Path) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    config.chuda.lod_2_below = config.chuda.lod_3_below + (2 * LOD_BLEND_RADIUS) - 1
+
+    with pytest.raises(ValueError, match="too close"):
+        run_pyramid(config)
 
 
 def test_pyramid_geometry_uses_alpha_bounds_and_padding(tmp_path: Path) -> None:
@@ -252,13 +296,19 @@ def test_pyramid_prepares_identically_sized_shared_crops(tmp_path: Path) -> None
     for source in sources.values():
         assert (source.width, source.height) == (44, 44)
 
+    prepared_geometry, buffers, _elapsed = _prepare_record(record, config, (8, 10, 12, 20))
+    assert prepared_geometry == geometry
+    assert {"blend-008", "blend-010", "blend-012", "lod-2"} <= buffers.keys()
+    assert "blend-020" not in buffers
+    assert {(width, height) for width, height, _data in buffers.values()} == {(44, 44)}
+
 
 def test_pyramid_renders_and_packs_one_record_without_staging_tree(tmp_path: Path) -> None:
     config = load_run_config(Path("configs/runs/smoke.yaml"))
     config.data_dir = tmp_path / "data"
     config.chuda.backend = "cpu"
-    config.chuda.min_width = 2
-    config.chuda.max_width = 3
+    config.chuda.min_width = 8
+    config.chuda.max_width = 12
     config.manifest_dir.mkdir(parents=True)
     original = config.data_dir / "cutout.png"
     original.parent.mkdir(parents=True, exist_ok=True)
@@ -277,7 +327,15 @@ def test_pyramid_renders_and_packs_one_record_without_staging_tree(tmp_path: Pat
     assert run_pyramid(config) == (1, 0, 0)
 
     record = next(read_jsonl(config.manifest_dir / "pyramids.jsonl"))
-    assert [level["width"] for level in record["pyramid_levels"]] == [2, 3]
+    assert [level["width"] for level in record["pyramid_levels"]] == [8, 9, 10, 11, 12]
+    assert record["pyramid_levels"][0]["source_lods"] == [
+        {"name": "lod-3", "weight": 0.75},
+        {"name": "lod-2", "weight": 0.25},
+    ]
+    assert record["pyramid_levels"][2]["source_lods"] == [
+        {"name": "lod-3", "weight": 0.5},
+        {"name": "lod-2", "weight": 0.5},
+    ]
     assert record["chuda_backends"] == ["cpu"]
     assert (config.data_dir / record["artifact"]).is_file()
     assert not list(config.run_dir.glob("ansi-scaler-pyramids-*"))

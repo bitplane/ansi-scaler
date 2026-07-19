@@ -347,7 +347,15 @@
       }
       if (!await drawAnsi(level, request)) return false;
       ansiDimensions.textContent = `${level.width} × ${level.rows}`;
-      ansiSource.textContent = level.source_lod.replace('-', ' ').toUpperCase();
+      const sourceLods = level.source_lods || [{name: level.source_lod, weight: 1}];
+      if (sourceLods.length === 1) {
+        ansiSource.textContent = sourceLods[0].name.replace('-', ' ').toUpperCase();
+      } else {
+        const lower = sourceLods[0].name.replace('-', ' ').toUpperCase();
+        const higher = sourceLods[1].name.replace('-', ' ').toUpperCase();
+        const higherWeight = `${Math.round(sourceLods[1].weight * 1000) / 10}%`;
+        ansiSource.textContent = `${lower} → ${higher} · ${higherWeight}`;
+      }
       imageLabel.textContent = `ANSI · width ${level.width}`;
       ansiLoading.classList.add('hidden');
       return true;
