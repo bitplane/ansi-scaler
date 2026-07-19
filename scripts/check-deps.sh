@@ -18,8 +18,8 @@ header = include / "Python.h"
 if not header.is_file():
     raise SystemExit(
         f"missing Python development header: {header}\n"
-        "Install the development package matching this interpreter (for example python3.12-dev on Ubuntu), "
-        "or reinstall the uv-managed Python and recreate .venv."
+        "This project uses uv-managed Python so headers are identical on every host. "
+        "Recreate .venv after updating the repository."
     )
 PY
 then

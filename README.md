@@ -24,15 +24,18 @@ make help
 
 ### System dependencies
 
-The locked Python environment does not replace host compilers, Python headers,
-the NVIDIA driver, Rust, or `zstd`. On Ubuntu, the baseline packages are:
+The locked Python environment does not replace host compilers, the NVIDIA
+driver, Rust, or `zstd`. On Ubuntu, the baseline packages are:
 
 ```bash
-sudo apt install build-essential python3.12-dev zstd
+sudo apt install build-essential zstd
 ```
 
-Install Rust with `rustup`, and install an NVIDIA driver supported by the locked
-PyTorch build. Check the complete host before starting an expensive run:
+The venv deliberately uses uv-managed CPython rather than Ubuntu's system
+Python, so its matching development headers are installed automatically and
+consistently. Install Rust with `rustup`, and install an NVIDIA driver supported
+by the locked PyTorch build. Check the complete host before starting an
+expensive run:
 
 ```bash
 make deps
