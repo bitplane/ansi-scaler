@@ -64,7 +64,7 @@ def test_ansi_parser_validates_grid_dimensions() -> None:
         ansi_to_runs(b"aa\nb\n", width=2, rows=2)
 
 
-def test_pyramid_cache_validates_levels_and_evicts_to_budget(tmp_path: Path) -> None:
+def test_pyramid_cache_validates_levels_and_drops_previous_asset(tmp_path: Path) -> None:
     first_path = tmp_path / "first.tar.zst"
     second_path = tmp_path / "second.tar.zst"
     first = write_archive(first_path, {2: b"aa\n", 3: b"bbb\n"})
@@ -73,8 +73,9 @@ def test_pyramid_cache_validates_levels_and_evicts_to_budget(tmp_path: Path) -> 
 
     assert cache.level(first, first_path, 3) == b"bbb\n"
     assert cache.level(second, second_path, 2) == b"cccc\n"
-    assert cache.byte_size <= 8
+    assert cache.byte_size == len(b"cccc\n")
     assert len(cache._items) == 1
+    assert next(iter(cache._items))[0] == second["id"]
 
     second["pyramid_levels"][0]["sha256"] = "0" * 64
     cache.clear()

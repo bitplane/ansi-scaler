@@ -123,9 +123,8 @@ class PyramidCache:
                 raise KeyError(f"Pyramid {record['id']} has no width {width}") from error
 
     def _insert(self, key: tuple[str, str], item: CachedPyramid) -> None:
-        while self._items and self.byte_size + item.byte_size > self.byte_budget:
-            _, removed = self._items.popitem(last=False)
-            self.byte_size -= removed.byte_size
+        self._items.clear()
+        self.byte_size = 0
         self._items[key] = item
         self.byte_size += item.byte_size
 

@@ -22,6 +22,8 @@
   let scrubTimer = null;
   let playing = false;
   let ansiLevel = null;
+  let ansiCachePyramid = ansiStage?.dataset.pyramid || null;
+  const ansiLevelCache = new Map();
   let displayMode = 'fit';
   const cellWidth = 8;
   const cellHeight = 16;
@@ -322,6 +324,11 @@
   async function loadAnsi(width, {stop = true} = {}) {
     if (!ansiStage || !ansiView) return false;
     if (stop) stopPlayback();
+    const pyramidId = ansiStage.dataset.pyramid;
+    if (pyramidId !== ansiCachePyramid) {
+      ansiLevelCache.clear();
+      ansiCachePyramid = pyramidId;
+    }
     const bounded = Math.max(Number(ansiView.dataset.minWidth), Math.min(Number(ansiView.dataset.maxWidth), Number(width)));
     ansiSlider.value = bounded;
     localStorage.setItem('ansi-review-width', String(bounded));
@@ -331,9 +338,13 @@
     ansiLoading.textContent = 'loading ANSI…';
     ansiLoading.classList.remove('hidden');
     try {
-      const response = await fetch(`/api/pyramids/${ansiStage.dataset.pyramid}/levels/${bounded}`, {signal: request.signal});
-      if (!response.ok) throw new Error((await response.json()).detail || 'Could not load ANSI level');
-      const level = await response.json();
+      let level = ansiLevelCache.get(bounded);
+      if (!level) {
+        const response = await fetch(`/api/pyramids/${pyramidId}/levels/${bounded}`, {signal: request.signal});
+        if (!response.ok) throw new Error((await response.json()).detail || 'Could not load ANSI level');
+        level = await response.json();
+        ansiLevelCache.set(bounded, level);
+      }
       if (!await drawAnsi(level, request)) return false;
       ansiDimensions.textContent = `${level.width} × ${level.rows}`;
       ansiSource.textContent = level.source_lod.replace('-', ' ').toUpperCase();
