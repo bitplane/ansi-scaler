@@ -50,7 +50,7 @@ vlm:
 llm:
   model: qwen3:8b
   endpoint: http://127.0.0.1:11434
-  prompt_version: corpus-verifier-v3
+  prompt_version: corpus-verifier-v4
   temperature: 0.0
   num_predict: 256
   timeout_seconds: 300

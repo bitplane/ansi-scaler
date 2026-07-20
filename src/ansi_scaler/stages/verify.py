@@ -15,16 +15,18 @@ from ansi_scaler.runner import run_stage
 from ansi_scaler.stages.ollama import OllamaStructuredOutputError, RequestFunction, request_with_retry
 
 
-VERIFIER_PROMPT = """You are a conservative quality gate for a synthetic game-art corpus. Compare the requested semantic
-concept with an independent vision model's factual observations. Judge semantic equivalence rather than exact noun
-matching: synonyms and visible held, mounted, attached, or supporting components can satisfy the concept. The checkerboard
-is a visualization of transparency and is never a background mismatch. Do not judge studio presentation, style scaffolding,
-or other generator instructions that are not present in the semantic request.
+VERIFIER_PROMPT = """You are a corpus safety gate, not a detailed prompt-compliance judge. Decide whether an independently
+observed game asset is a usable example of the short subject title. Theme and category are broad catalogue context only;
+they are not requirements that must be visibly represented. Accept ordinary variation in pose, orientation, colour,
+equipment, components, and artistic interpretation. Synonyms and visible held, mounted, attached, or supporting components
+can satisfy the subject. Never invent requirements that are absent from the short subject title.
 
-Reject clear wrong subjects, genuinely separate candidate alternatives, incoherent generation, or cutout damage that makes
-the asset unusable. Attribute wrong content or incoherent source imagery to generate; attribute missing regions, halos,
-residual backgrounds, stray cutout fragments, or excessive transparency to background. If evidence is ambiguous or
-insufficient choose review, never accept. Return JSON matching the supplied schema only."""
+The input contains structured visual facts only. Transparency is intentional and must never be treated as a background
+mismatch, incomplete rendering, or cutout damage unless the issue list explicitly reports visible damage. Reject only a
+clear wrong subject, genuinely separate candidate alternatives, visibly incoherent generation, or an explicit cutout issue
+that makes the asset unusable. Attribute wrong content or incoherent source imagery to generate; attribute explicit missing
+regions, halos, residual backgrounds, stray cutout fragments, or excessive transparency to background. If the structured
+evidence is genuinely ambiguous choose review. Return JSON matching the supplied schema only."""
 
 
 Judgment = Literal["match", "mismatch", "uncertain"]
@@ -82,13 +84,28 @@ class OllamaVerifier:
             return json.load(response)
 
     def __call__(self, source: dict[str, Any]) -> dict[str, Any]:
+        observations = source["classification"]
+        visual_fact_keys = (
+            "primary_subject",
+            "primary_object",
+            "candidate_assets",
+            "components",
+            "issues",
+            "artifact_flags",
+            "object_count",
+            "multiple_candidate_assets",
+            "visually_coherent",
+            "confidence",
+            "uncertainty",
+            "ambiguities",
+        )
         evidence = {
-            "requested_concept": source.get("label", source.get("concept_name")),
-            "requested_concept_id": source.get("specification_id", source.get("concept_id")),
-            "semantic_prompt": source.get("semantic_prompt", source.get("label", source.get("concept_name"))),
-            "vision_observations": {
-                key: value for key, value in source["classification"].items() if key != "spatial_description"
+            "catalogue": {
+                "theme": source.get("theme"),
+                "category": source.get("location", source.get("role")),
+                "subject": source.get("label", source.get("concept_name")),
             },
+            "vision_facts": {key: observations[key] for key in visual_fact_keys if key in observations},
         }
         payload = {
             "model": self.settings.model,

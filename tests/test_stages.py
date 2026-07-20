@@ -190,8 +190,12 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
     assert verification["verification"]["decision"] == "accept"
     verifier_evidence = json.loads(llm_requests[0]["messages"][1]["content"])
     assert "generation_prompt" not in verifier_evidence
-    assert "semantic_prompt" in verifier_evidence
-    assert "spatial_description" not in verifier_evidence["vision_observations"]
+    assert "semantic_prompt" not in verifier_evidence
+    assert "requested_concept" not in verifier_evidence
+    assert verifier_evidence["catalogue"]["subject"] == "green object"
+    assert "description" not in verifier_evidence["vision_facts"]
+    assert "spatial_description" not in verifier_evidence["vision_facts"]
+    assert verifier_evidence["vision_facts"]["primary_subject"] == "object"
     assert llm_requests[0]["options"]["num_predict"] == 256
 
     record = next(read_jsonl(config.manifest_dir / "lods.jsonl"))
