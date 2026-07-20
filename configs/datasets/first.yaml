@@ -1,0 +1,13 @@
+name: ansi-pyramids-v1
+run_config: configs/runs/first.yaml
+format: ansi-pyramid-tensors-v1
+selection_policy: human-override-verifier-accept-v1
+pyramid_format: ansi-scaler-pyramid-v3
+split_seed: 42000
+splits:
+  train: 0.8
+  validation: 0.1
+  test: 0.1
+shard_count: 16
+base_vocabulary: null
+output_root: data/datasets

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -9,6 +10,9 @@ import typer
 
 from ansi_scaler.catalog import load_catalog
 from ansi_scaler.config import RunConfig, load_run_config
+from ansi_scaler.dataset.compiler import compile_dataset, plan_dataset
+from ansi_scaler.dataset.models import load_dataset_recipe
+from ansi_scaler.dataset.validate import validate_dataset
 from ansi_scaler.gc import apply_gc_plan, build_gc_plan, plan_report
 from ansi_scaler.locking import CorpusBusyError, corpus_lock
 from ansi_scaler.prompts import write_prompt_manifest
@@ -27,6 +31,7 @@ app.add_typer(catalog_app, name="catalog")
 app.add_typer(prompts_app, name="prompts")
 
 RunConfigOption = Annotated[Path, typer.Option("--run-config", exists=True, dir_okay=False)]
+DatasetRecipeOption = Annotated[Path, typer.Option("--recipe", exists=True, dir_okay=False)]
 
 
 def _config(path: Path) -> RunConfig:
@@ -239,3 +244,32 @@ def garbage_collect(run_config: RunConfigOption, confirm: bool = False) -> None:
     except (CorpusBusyError, ValueError, RuntimeError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error
+
+
+@app.command("dataset-plan")
+def dataset_plan(
+    recipe: DatasetRecipeOption,
+    limit: Annotated[int | None, typer.Option(min=1)] = None,
+) -> None:
+    """Report selection and estimated size without writing a dataset."""
+    settings = load_dataset_recipe(recipe)
+    report = plan_dataset(settings, limit=limit)
+    typer.echo(json.dumps(report, sort_keys=True, indent=2))
+
+
+@app.command("dataset")
+def dataset_build(
+    recipe: DatasetRecipeOption,
+    limit: Annotated[int | None, typer.Option(min=1)] = None,
+) -> None:
+    """Compile selected pyramids into immutable safetensors shards."""
+    settings = load_dataset_recipe(recipe)
+    config = load_run_config(settings.run_config)
+    with corpus_lock(config.data_dir, exclusive=False):
+        typer.echo(f"Dataset: {compile_dataset(settings, limit=limit)}")
+
+
+@app.command("dataset-validate")
+def dataset_validate(path: Annotated[Path, typer.Option("--dataset-dir", exists=True, file_okay=False)]) -> None:
+    """Validate checksums, tensors, offsets, splits, and dimensions."""
+    typer.echo(json.dumps(validate_dataset(path), sort_keys=True, indent=2))

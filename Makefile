@@ -1,9 +1,12 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
-	deps catalog prompts generate rembg lod pyramid classify verify review corpus smoke gc
+	deps catalog prompts generate rembg lod pyramid classify verify review corpus smoke gc \
+	dataset-plan dataset dataset-validate
 
 RUN_CONFIG ?= configs/runs/first.yaml
 RETRY_ERRORS ?= 0
 GC_CONFIRM ?= 0
+DATASET_RECIPE ?= configs/datasets/first.yaml
+DATASET_LIMIT ?=
 
 all: dev test lint  ## Prepare the project and run all local checks
 
@@ -34,6 +37,15 @@ clean:  ## Remove the venv and local caches, but never corpus data
 
 gc: .venv/.installed  ## Compact superseded corpus data after showing a deletion report
 	GC_CONFIRM=$(GC_CONFIRM) scripts/gc.sh $(RUN_CONFIG)
+
+dataset-plan: .venv/.installed  ## Preview dataset selection, splits, cell count, and size
+	DATASET_LIMIT=$(DATASET_LIMIT) scripts/dataset-plan.sh $(DATASET_RECIPE)
+
+dataset: .venv/.installed  ## Compile resumable immutable safetensors dataset shards
+	DATASET_LIMIT=$(DATASET_LIMIT) scripts/dataset.sh $(DATASET_RECIPE)
+
+dataset-validate: .venv/.installed  ## Validate DATASET_DIR checksums, tensors, and split isolation
+	scripts/dataset-validate.sh
 
 deps: .venv/.installed  ## Check host build tools, Python headers, CUDA, and GPU runtimes
 	scripts/check-deps.sh

@@ -193,3 +193,25 @@ an exact deletion plan beneath `data/runs/<run>/gc/`. Artifact blobs themselves
 are permanently deleted and are not included in that metadata backup. The
 neighbouring review SQLite index is disposable and rebuilt the next time the
 review server starts.
+## Compiling a training dataset
+
+Dataset compilation is deliberately separate from corpus generation. The recipe in
+`configs/datasets/first.yaml` freezes the selection policy, split seed, pyramid format, shard count, and optional
+parent glyph vocabulary.
+
+```console
+make dataset-plan
+make dataset DATASET_LIMIT=10
+make dataset
+make dataset-validate DATASET_DIR=data/datasets/ansi-pyramids-v1/<dataset-id>
+```
+
+`dataset-plan` is read-only. It reports human-review overrides, provisional verifier decisions, prompt-family splits,
+cell count, and estimated raw tensor size. `dataset` writes content-addressed `.building` output and resumes complete
+shards after interruption. Publication is an atomic rename; an already-published dataset is immutable.
+
+Each safetensors shard stores ragged pyramid levels using offset arrays. Cells contain a `uint16` glyph vocabulary ID,
+foreground RGB, background RGB, and a background-present bit. Dataset indexes retain the exact source lineage, source
+hashes, selection reason, split, review/verifier provenance, bboxes, and prompt metadata. Glyph vocabularies reserve IDs
+0–2 for PAD, MASK, and UNK; a recipe can name an older `vocabulary.json` to preserve every existing ID and append new
+Unicode codepoints deterministically.
