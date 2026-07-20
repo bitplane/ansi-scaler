@@ -56,7 +56,7 @@ content: .venv/.installed  ## Validate authored theme/location/object specificat
 prompts: .venv/.installed  ## Build a deterministic prompt manifest
 	scripts/prompts.sh $(RUN_CONFIG)
 
-generate: deps  ## Generate Sana rasters (downloads model; CUDA required)
+generate: deps prompts  ## Refresh prompts, then generate Sana rasters (downloads model; CUDA required)
 	scripts/generate.sh $(RUN_CONFIG)
 
 background: .venv/.installed  ## Extract RGBA subjects with the configured provider
