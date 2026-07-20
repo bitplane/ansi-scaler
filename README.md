@@ -69,12 +69,17 @@ make corpus
 ```
 
 Infrastructure failures abort a stage immediately and are not recorded as bad
-samples. If an older run already filled an error manifest because a dependency
-was missing, fix the dependency and explicitly reconsider those records with:
+samples. Individual record failures are retained as attrition while successful
+records continue into later stages; a fresh stage stops only when every selected
+record fails. If an older run already filled an error manifest, fix or tune the
+cause and explicitly infill those records with:
 
 ```bash
 make corpus RETRY_ERRORS=1
 ```
+
+`RETRY_ERRORS=1` also propagates through prerequisite stages of targets such as
+`make pyramid` and `make verify`.
 
 Choose another recipe with `RUN_CONFIG=configs/runs/example.yaml`. Generated
 manifests, reports, and content-addressed artifacts live under ignored `data/`.

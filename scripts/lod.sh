@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-uv run --frozen ansi-scaler lod --run-config "$1"
-
+arguments=(lod --run-config "$1")
+if [[ "${RETRY_ERRORS:-0}" == "1" ]]; then
+    arguments+=(--retry-errors)
+fi
+uv run --frozen ansi-scaler "${arguments[@]}"

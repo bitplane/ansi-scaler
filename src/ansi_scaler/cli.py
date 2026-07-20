@@ -44,10 +44,11 @@ def _config(path: Path) -> RunConfig:
     return config
 
 
-def _result(stage: str, result: tuple[int, int, int], *, fail_on_record_errors: bool = True) -> None:
+def _result(stage: str, result: tuple[int, int, int]) -> None:
     successes, failures, skipped = result
     typer.echo(f"{stage}: {successes} completed, {failures} failed, {skipped} skipped")
-    if failures and fail_on_record_errors:
+    if failures and not successes and not skipped:
+        typer.echo(f"{stage}: every selected record failed; stopping the pipeline", err=True)
         raise typer.Exit(code=1)
 
 
@@ -206,24 +207,22 @@ def run_pipeline(
         write_prompt_manifest(config, content)
         if through == "prompts":
             return
-        _result("generate", run_generate(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
+        _result("generate", run_generate(config, force=force, retry_errors=retry_errors))
         if through == "generate":
             return
-        _result(
-            "background", run_background(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False
-        )
+        _result("background", run_background(config, force=force, retry_errors=retry_errors))
         if through == "background":
             return
-        _result("lod", run_lod(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
+        _result("lod", run_lod(config, force=force, retry_errors=retry_errors))
         if through == "lod":
             return
-        _result("pyramid", run_pyramid(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
+        _result("pyramid", run_pyramid(config, force=force, retry_errors=retry_errors))
         if through == "pyramid":
             return
-        _result("classify", run_classify(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
+        _result("classify", run_classify(config, force=force, retry_errors=retry_errors))
         if through == "classify":
             return
-        _result("verify", run_verify(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
+        _result("verify", run_verify(config, force=force, retry_errors=retry_errors))
 
 
 @app.command("gc")

@@ -555,7 +555,7 @@ def test_pipeline_can_run_through_pyramid(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(cli, "load_content", lambda _: object())
     monkeypatch.setattr(cli, "write_prompt_manifest", lambda *_: called.append("prompts"))
     monkeypatch.setattr(cli, "run_generate", lambda *_args, **_kwargs: called.append("generate") or (1, 0, 0))
-    monkeypatch.setattr(cli, "run_background", lambda *_args, **_kwargs: called.append("background") or (0, 1, 0))
+    monkeypatch.setattr(cli, "run_background", lambda *_args, **_kwargs: called.append("background") or (1, 1, 0))
     monkeypatch.setattr(cli, "run_lod", lambda *_args, **_kwargs: called.append("lod") or (1, 0, 0))
     monkeypatch.setattr(cli, "run_pyramid", lambda *_args, **_kwargs: called.append("pyramid") or (1, 0, 0))
 
@@ -589,3 +589,41 @@ def test_pipeline_can_run_through_verification(tmp_path: Path, monkeypatch) -> N
 
     assert result.exit_code == 0
     assert called == ["prompts", "generate", "background", "lod", "pyramid", "classify", "verify"]
+
+
+@pytest.mark.parametrize("generate_result", [(9, 1, 0), (0, 1, 9)])
+def test_pipeline_continues_after_partial_record_failures(tmp_path: Path, monkeypatch, generate_result) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    called = []
+    monkeypatch.setattr(cli, "load_run_config", lambda _: config)
+    monkeypatch.setattr(cli, "load_content", lambda _: object())
+    monkeypatch.setattr(cli, "write_prompt_manifest", lambda *_: None)
+    monkeypatch.setattr(cli, "run_generate", lambda *_args, **_kwargs: generate_result)
+    monkeypatch.setattr(cli, "run_background", lambda *_args, **_kwargs: called.append("background") or (1, 0, 0))
+
+    result = CliRunner().invoke(
+        cli.app,
+        ["run", "--run-config", "configs/runs/smoke.yaml", "--through", "background"],
+    )
+
+    assert result.exit_code == 0
+    assert called == ["background"]
+
+
+def test_pipeline_stops_when_every_selected_record_fails(tmp_path: Path, monkeypatch) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    monkeypatch.setattr(cli, "load_run_config", lambda _: config)
+    monkeypatch.setattr(cli, "load_content", lambda _: object())
+    monkeypatch.setattr(cli, "write_prompt_manifest", lambda *_: None)
+    monkeypatch.setattr(cli, "run_generate", lambda *_args, **_kwargs: (0, 10, 0))
+    monkeypatch.setattr(cli, "run_background", lambda *_args, **_kwargs: pytest.fail("background should not run"))
+
+    result = CliRunner().invoke(
+        cli.app,
+        ["run", "--run-config", "configs/runs/smoke.yaml", "--through", "background"],
+    )
+
+    assert result.exit_code == 1
+    assert "every selected record failed" in result.output

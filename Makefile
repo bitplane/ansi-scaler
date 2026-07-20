@@ -57,16 +57,16 @@ prompts: .venv/.installed  ## Build a deterministic prompt manifest
 	scripts/prompts.sh $(RUN_CONFIG)
 
 generate: deps prompts  ## Refresh prompts, then generate Sana rasters (downloads model; CUDA required)
-	scripts/generate.sh $(RUN_CONFIG)
+	RETRY_ERRORS=$(RETRY_ERRORS) scripts/generate.sh $(RUN_CONFIG)
 
 background: generate  ## Resume through RGBA extraction with the configured provider
-	scripts/background.sh $(RUN_CONFIG)
+	RETRY_ERRORS=$(RETRY_ERRORS) scripts/background.sh $(RUN_CONFIG)
 
 lod: background  ## Resume through SVG LODs and PNG previews with VTracer
-	scripts/lod.sh $(RUN_CONFIG)
+	RETRY_ERRORS=$(RETRY_ERRORS) scripts/lod.sh $(RUN_CONFIG)
 
 pyramid: lod  ## Resume through compressed ANSI pyramids with the pinned Chuda Python backend
-	scripts/pyramid.sh $(RUN_CONFIG)
+	RETRY_ERRORS=$(RETRY_ERRORS) scripts/pyramid.sh $(RUN_CONFIG)
 
 classify: pyramid  ## Resume through cutout classification with the configured Ollama VLM
 	RETRY_ERRORS=$(RETRY_ERRORS) scripts/classify.sh $(RUN_CONFIG)
