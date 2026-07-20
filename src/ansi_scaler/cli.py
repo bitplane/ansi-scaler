@@ -10,7 +10,6 @@ import typer
 from dotenv import load_dotenv
 
 from ansi_scaler.config import RunConfig, load_run_config
-from ansi_scaler.background_trial import run_background_trial
 from ansi_scaler.content import load_content
 from ansi_scaler.dataset.compiler import compile_dataset, plan_dataset
 from ansi_scaler.dataset.models import load_dataset_recipe
@@ -97,18 +96,6 @@ def background(
     config = _config(run_config)
     with corpus_lock(config.data_dir, exclusive=False):
         _result("background", run_background(config, limit=limit, force=force, retry_errors=retry_errors))
-
-
-@app.command("background-trial")
-def background_trial(
-    run_config: RunConfigOption,
-    trial: Annotated[Path, typer.Option("--trial", exists=True, dir_okay=False)],
-    force: bool = False,
-) -> None:
-    """Compare background providers without changing the canonical run."""
-    config = _config(run_config)
-    with corpus_lock(config.data_dir, exclusive=False):
-        typer.echo(f"Comparison report: {run_background_trial(config, trial, force=force)}")
 
 
 @app.command("lod")
