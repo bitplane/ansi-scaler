@@ -82,7 +82,7 @@ def select_assets(config: RunConfig, pyramid_format: str, *, limit: int | None =
             include, reason = False, "verifier_missing"
         else:
             include, reason = False, f"verifier_{verifier_decision}"
-        family = prompt.get("prompt_id", prompt["id"])
+        family = prompt.get("prompt_family_id", prompt.get("prompt_id", prompt["id"]))
         selected.append(
             {
                 "asset_id": prompt["id"],

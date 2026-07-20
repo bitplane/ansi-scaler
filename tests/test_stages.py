@@ -416,7 +416,7 @@ def test_pipeline_can_run_through_pyramid(tmp_path: Path, monkeypatch) -> None:
     config.data_dir = tmp_path / "data"
     called = []
     monkeypatch.setattr(cli, "load_run_config", lambda _: config)
-    monkeypatch.setattr(cli, "load_catalog", lambda _: object())
+    monkeypatch.setattr(cli, "load_content", lambda _: object())
     monkeypatch.setattr(cli, "write_prompt_manifest", lambda *_: called.append("prompts"))
     monkeypatch.setattr(cli, "run_generate", lambda *_args, **_kwargs: called.append("generate") or (1, 0, 0))
     monkeypatch.setattr(cli, "run_rembg", lambda *_args, **_kwargs: called.append("rembg") or (0, 1, 0))
@@ -437,7 +437,7 @@ def test_pipeline_can_run_through_verification(tmp_path: Path, monkeypatch) -> N
     config.data_dir = tmp_path / "data"
     called = []
     monkeypatch.setattr(cli, "load_run_config", lambda _: config)
-    monkeypatch.setattr(cli, "load_catalog", lambda _: object())
+    monkeypatch.setattr(cli, "load_content", lambda _: object())
     monkeypatch.setattr(cli, "write_prompt_manifest", lambda *_: called.append("prompts"))
     monkeypatch.setattr(cli, "run_generate", lambda *_args, **_kwargs: called.append("generate") or (1, 0, 0))
     monkeypatch.setattr(cli, "run_rembg", lambda *_args, **_kwargs: called.append("rembg") or (1, 0, 0))

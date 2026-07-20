@@ -1,5 +1,5 @@
 name: smoke
-catalog_dir: catalog
+content_dir: content
 data_dir: data
 limit: 10
 resources:
@@ -11,9 +11,7 @@ review:
   port: 8765
   refresh_seconds: 2.0
 prompts:
-  template_config: configs/prompts/objects.yaml
-  variants_per_entry: 5
-  seeds_per_prompt: 2
+  seeds_per_specification: 2
   base_seed: 52000
 sana:
   model_id: Efficient-Large-Model/Sana_600M_512px_diffusers
@@ -23,6 +21,13 @@ sana:
   guidance_scale: 5.0
   inference_steps: 24
   device: cuda
+  presentation_prompt: >-
+    single isolated subject, fully visible with comfortable margin, centered,
+    polished cartoon game asset, strong readable silhouette, chunky simple shapes,
+    clean crisp edges, vibrant controlled color palette, flat light-gray studio
+    background, even soft lighting, minimal contact shadow, no scenery, no
+    surrounding props, no border, no frame, no text, no logo
+  exclusions: [multiple subjects, duplicate object, cropped, cut off, complex background, landscape, room, scenery, pedestal, decorative border, text, letters, logo, watermark, photorealistic]
 rembg:
   model: birefnet-general
   sha256: 58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c

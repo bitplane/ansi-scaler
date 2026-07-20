@@ -58,8 +58,8 @@ class OllamaVerifier:
 
     def __call__(self, source: dict[str, Any]) -> dict[str, Any]:
         evidence = {
-            "requested_concept": source["concept_name"],
-            "requested_concept_id": source["concept_id"],
+            "requested_concept": source.get("label", source.get("concept_name")),
+            "requested_concept_id": source.get("specification_id", source.get("concept_id")),
             "generation_prompt": source["prompt"],
             "vision_observations": source["classification"],
         }

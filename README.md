@@ -5,7 +5,7 @@ The current pipeline creates isolated cartoon game assets and progressively
 simplified image LODs:
 
 ```text
-scene-kit catalogue -> prompts -> Sana raster -> rembg cutout -> VTracer LODs
+authored content -> prompts -> Sana raster -> rembg cutout -> VTracer LODs
                                                          -> Chuda ANSI pyramids
                                       -> VLM classification -> LLM verification
 ```
@@ -50,7 +50,7 @@ same guard automatically.
 Validate and build prompts without downloading a model:
 
 ```bash
-make catalog
+make content
 make prompts
 ```
 
@@ -84,12 +84,13 @@ Ollama classification and verification requests retry transient connection,
 timeout, rate-limit, and server failures three times with exponential backoff.
 An exhausted request rejects only that item and the pipeline continues.
 
-## Catalogue
+## Authored content
 
-Canonical reusable identities live in `catalog/concepts`; scene kits select
-and contextualise them in `catalog/scene-kits`. Prompts are disposable derived
-data, never catalogue source. The first catalogue contains woodland, village,
-city, castle, and spaceport kits with 24 memberships each.
+Canonical object specifications live beneath `content/<theme>/<location>.yaml`.
+Theme and location are navigation and balancing metadata only: they are never
+implicitly inserted into prompts. Each object has one canonical home and a
+complete manually authored semantic prompt. The initial iteration library has
+50 specifications expanded to two deterministic seeds, producing 100 requests.
 
 The LOD stage retains the transparent original plus canonical SVGs and small
 PNG previews. Pyramid v3 cross-fades aligned, shared-crop LOD rasters before

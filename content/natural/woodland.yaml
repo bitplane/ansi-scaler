@@ -1,0 +1,13 @@
+theme: natural
+location: woodland
+objects:
+  - {id: ancient-oak, label: Ancient oak, subject_family: oak-tree, prompt: "single ancient oak tree with a thick twisting trunk, broad balanced crown and visible roots, complete tree visible", exclusions: [forest, other trees, landscape], tags: [vegetation]}
+  - {id: pine-tree, label: Pine tree, subject_family: pine-tree, prompt: "single tall evergreen pine tree with a clear triangular silhouette, complete trunk and crown visible", exclusions: [forest, snow, other trees, landscape], tags: [vegetation]}
+  - {id: fallen-log, label: Fallen log, subject_family: fallen-log, prompt: "single moss-covered fallen log with one broken branch and visible cut end, side three-quarter view", exclusions: [forest floor, trees, mushrooms], tags: [vegetation]}
+  - {id: tree-stump, label: Tree stump, subject_family: tree-stump, prompt: "single old broad tree stump with visible growth rings, rough roots and a small patch of moss, three-quarter view", exclusions: [forest, axe, mushrooms], tags: [vegetation]}
+  - {id: fern, label: Woodland fern, subject_family: fern, prompt: "single broad woodland fern plant with a compact cluster of clearly separated fronds, front three-quarter view", exclusions: [multiple plants, forest floor], tags: [vegetation]}
+  - {id: mushroom-cluster, label: Mushroom cluster, subject_family: mushrooms, prompt: "single compact cluster of five woodland mushrooms with varied cap sizes growing from one shared patch", exclusions: [forest, log, scattered mushrooms], tags: [vegetation]}
+  - {id: mossy-boulder, label: Mossy boulder, subject_family: boulder, prompt: "single large rounded weathered boulder with moss covering part of its upper surface, three-quarter view", exclusions: [mountain, landscape, other rocks], tags: [terrain]}
+  - {id: trail-sign, label: Trail sign, subject_family: trail-sign, prompt: "single freestanding wooden trail signpost with two blank directional boards, front three-quarter view", exclusions: [text, symbols, forest, path], tags: [fixture]}
+  - {id: grey-wolf, label: Grey wolf, subject_family: wolf, prompt: "single alert grey wolf standing on all four legs, full body side three-quarter view, tail and paws visible", exclusions: [pack, forest, moon], tags: [creature]}
+  - {id: woodland-deer, label: Woodland deer, subject_family: deer, prompt: "single alert brown deer standing on all four legs, full body side three-quarter view, small antlers and complete hooves visible", exclusions: [herd, forest, grass], tags: [creature]}

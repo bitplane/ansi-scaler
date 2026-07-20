@@ -8,9 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class PromptSettings(BaseModel):
-    template_config: Path = Path("configs/prompts/objects.yaml")
-    variants_per_entry: int = Field(default=5, ge=1)
-    seeds_per_prompt: int = Field(default=2, ge=1)
+    seeds_per_specification: int = Field(default=2, ge=1)
     base_seed: int = 42000
 
 
@@ -22,6 +20,31 @@ class SanaSettings(BaseModel):
     guidance_scale: float = 5.0
     inference_steps: int = 24
     device: str = "cuda"
+    presentation_prompt: str = (
+        "single isolated subject, fully visible with comfortable margin, centered, polished cartoon game asset, "
+        "strong readable silhouette, chunky simple shapes, clean crisp edges, vibrant controlled color palette, "
+        "flat light-gray studio background, even soft lighting, minimal contact shadow, no scenery, no surrounding "
+        "props, no border, no frame, no text, no logo"
+    )
+    exclusions: list[str] = Field(
+        default_factory=lambda: [
+            "multiple subjects",
+            "duplicate object",
+            "cropped",
+            "cut off",
+            "complex background",
+            "landscape",
+            "room",
+            "scenery",
+            "pedestal",
+            "decorative border",
+            "text",
+            "letters",
+            "logo",
+            "watermark",
+            "photorealistic",
+        ]
+    )
 
 
 class RembgSettings(BaseModel):
@@ -126,7 +149,7 @@ class ReviewSettings(BaseModel):
 
 class RunConfig(BaseModel):
     name: str
-    catalog_dir: Path = Path("catalog")
+    content_dir: Path = Path("content")
     data_dir: Path = Path("data")
     limit: int | None = Field(default=None, ge=1)
     prompts: PromptSettings = PromptSettings()

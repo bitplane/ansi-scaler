@@ -1,0 +1,13 @@
+theme: medieval
+location: village
+objects:
+  - {id: blacksmith, label: Blacksmith, subject_family: blacksmith, prompt: "single sturdy medieval blacksmith standing full body, leather apron, gloves and small forging hammer held at their side", exclusions: [forge, workshop, anvil, additional people], tags: [character]}
+  - {id: travelling-merchant, label: Travelling merchant, subject_family: merchant, prompt: "single travelling medieval merchant standing full body with a shoulder satchel and a small bundle of wares", exclusions: [market, stall, town, additional people], tags: [character]}
+  - {id: timber-cottage, label: Timber cottage, subject_family: cottage, prompt: "single compact timber-and-plaster cottage with a steep roof, front three-quarter exterior view, complete building visible", exclusions: [street, neighbouring buildings, landscape], tags: [building]}
+  - {id: stone-well, label: Stone well, subject_family: well, prompt: "single circular stone water well with wooden roof, crank and bucket, front three-quarter view", exclusions: [village, people, scenery], tags: [fixture]}
+  - {id: handcart, label: Handcart, subject_family: handcart, prompt: "single empty two-wheeled wooden handcart with handles resting level, three-quarter view", exclusions: [horse, person, goods, street], tags: [vehicle]}
+  - {id: bound-barrel, label: Bound barrel, subject_family: barrel, prompt: "single upright oak barrel with dark iron hoops and visible wooden staves, three-quarter view", tags: [container]}
+  - {id: burlap-sack, label: Burlap sack, subject_family: sack, prompt: "single tied burlap grain sack standing upright with a broad stable base and a few natural folds", exclusions: [pile of sacks, grain spill], tags: [container]}
+  - {id: wooden-fence, label: Wooden fence section, subject_family: fence, prompt: "single short freestanding section of rustic wooden fence with three posts and two horizontal rails, front view", exclusions: [field, landscape, long fence], tags: [infrastructure]}
+  - {id: scarecrow, label: Scarecrow, subject_family: scarecrow, prompt: "single patched medieval field scarecrow on a simple wooden cross pole, straw hat and readable outstretched silhouette", exclusions: [field, crops, birds], tags: [fixture]}
+  - {id: farm-chicken, label: Farm chicken, subject_family: chicken, prompt: "single plump farm chicken standing in side three-quarter view, complete feet and tail visible", exclusions: [chicks, coop, farmyard], tags: [creature]}

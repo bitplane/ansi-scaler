@@ -1,0 +1,13 @@
+theme: urban
+location: city
+objects:
+  - {id: city-guard, label: City guard, subject_family: city-guard, prompt: "single uniformed fantasy city guard standing full body, practical helmet and short spear, neutral watchful pose", exclusions: [city gate, street, buildings, additional people], tags: [character]}
+  - {id: street-vendor, label: Street vendor, subject_family: street-vendor, prompt: "single lively street vendor standing full body with a small shoulder tray of colourful goods", exclusions: [market stall, street, crowd, additional people], tags: [character]}
+  - {id: narrow-townhouse, label: Narrow townhouse, subject_family: townhouse, prompt: "single narrow three-storey brick townhouse with a colourful front door and complete roofline, front three-quarter exterior view", exclusions: [street, neighbouring buildings, people], tags: [building]}
+  - {id: shopfront, label: Shopfront, subject_family: shopfront, prompt: "single compact freestanding fantasy shopfront facade with awning, display window and blank hanging sign, front view", exclusions: [text, street, neighbouring buildings, people], tags: [building]}
+  - {id: street-lamp, label: Street lamp, subject_family: street-lamp, prompt: "single ornate cast-iron street lamp with one glowing glass lantern, full post visible, front three-quarter view", exclusions: [street, additional lamps, buildings], tags: [fixture]}
+  - {id: park-bench, label: Park bench, subject_family: bench, prompt: "single empty public bench made from dark iron and wooden slats, front three-quarter view", exclusions: [park, people, street], tags: [fixture]}
+  - {id: stone-fountain, label: Stone fountain, subject_family: fountain, prompt: "single compact decorative stone fountain with one central bowl and a small controlled water plume, front three-quarter view", exclusions: [plaza, people, statues, buildings], tags: [fixture, water]}
+  - {id: direction-signpost, label: Direction signpost, subject_family: signpost, prompt: "single freestanding metal signpost with three blank directional signs pointing different ways, front three-quarter view", exclusions: [text, street, buildings], tags: [fixture]}
+  - {id: horse-carriage, label: Horse carriage, subject_family: carriage, prompt: "single enclosed four-wheeled passenger carriage without horses, complete body and wheels visible, side three-quarter view", exclusions: [horse, driver, road, buildings], tags: [vehicle]}
+  - {id: stray-cat, label: Stray cat, subject_family: cat, prompt: "single scruffy tabby cat standing full body with tail raised, side three-quarter view", exclusions: [street, bins, other cats], tags: [creature]}

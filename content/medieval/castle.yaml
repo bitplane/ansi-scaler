@@ -1,0 +1,13 @@
+theme: medieval
+location: castle
+objects:
+  - {id: standing-knight, label: Standing knight, subject_family: knight, prompt: "single armoured medieval knight standing at rest, full body three-quarter view, sword held at their side", exclusions: [castle, walls, buildings, additional people], tags: [character]}
+  - {id: shield-knight, label: Knight with raised shield, subject_family: knight, prompt: "single armoured medieval knight in a defensive pose, full body, round shield raised and sword visible", exclusions: [castle, walls, buildings, additional people], tags: [character]}
+  - {id: royal-guard, label: Royal guard, subject_family: royal-guard, prompt: "single ceremonial royal guard standing upright, full body, polished plate armour and crimson tabard, holding a halberd", exclusions: [throne room, palace, additional people], tags: [character]}
+  - {id: treasure-chest, label: Treasure chest, subject_family: chest, prompt: "single closed reinforced wooden treasure chest with iron bands and a large central lock, three-quarter view", tags: [container]}
+  - {id: weapon-rack, label: Weapon rack, subject_family: weapon-rack, prompt: "single freestanding wooden weapon rack holding a small orderly set of swords and spears, front three-quarter view", exclusions: [room, walls, people], tags: [fixture]}
+  - {id: armour-stand, label: Armour stand, subject_family: armour-stand, prompt: "single complete suit of medieval plate armour displayed on a simple wooden stand, front three-quarter view", exclusions: [person inside armour, room, walls], tags: [fixture]}
+  - {id: iron-brazier, label: Iron brazier, subject_family: brazier, prompt: "single squat iron brazier on four legs containing a compact orange flame, three-quarter view", exclusions: [fireplace, room], tags: [fixture, fire]}
+  - {id: portcullis, label: Portcullis, subject_family: portcullis, prompt: "single freestanding heavy iron portcullis section, fully visible rectangular spiked grid, front view", exclusions: [gatehouse, stone arch, walls], tags: [infrastructure]}
+  - {id: ballista, label: Ballista, subject_family: ballista, prompt: "single compact wooden ballista with iron fittings, loaded bolt and clearly visible winding mechanism, three-quarter view", exclusions: [castle, crew, battlefield], tags: [siege-engine]}
+  - {id: stone-gargoyle, label: Stone gargoyle, subject_family: gargoyle, prompt: "single crouching carved stone gargoyle statue with folded wings and a readable horned silhouette, three-quarter view", exclusions: [building, roof, wall], tags: [statue]}

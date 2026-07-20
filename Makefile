@@ -1,5 +1,5 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
-	deps catalog prompts generate rembg lod pyramid classify verify review corpus smoke gc \
+	deps content prompts generate rembg lod pyramid classify verify review corpus smoke gc \
 	dataset-plan dataset dataset-validate
 
 RUN_CONFIG ?= configs/runs/first.yaml
@@ -50,8 +50,8 @@ dataset-validate: .venv/.installed  ## Validate DATASET_DIR checksums, tensors, 
 deps: .venv/.installed  ## Check host build tools, Python headers, CUDA, and GPU runtimes
 	scripts/check-deps.sh
 
-catalog: .venv/.installed  ## Validate the committed concept catalogue
-	scripts/catalog.sh $(RUN_CONFIG)
+content: .venv/.installed  ## Validate authored theme/location/object specifications
+	.venv/bin/ansi-scaler content validate --run-config $(RUN_CONFIG)
 
 prompts: .venv/.installed  ## Build a deterministic prompt manifest
 	scripts/prompts.sh $(RUN_CONFIG)

@@ -124,10 +124,10 @@ class ReviewService:
                 "machine_decision": machine_decision,
                 "review": review,
                 "history": all_reviews.get(asset_id, []),
-                "kit_id": raster.get("kit_id", "unknown"),
-                "role": raster.get("role", "unknown"),
-                "concept_id": raster.get("concept_id", "unknown"),
-                "concept_name": raster.get("concept_name", raster.get("concept_id", "Unknown")),
+                "kit_id": raster.get("location", raster.get("kit_id", "unknown")),
+                "role": raster.get("theme", raster.get("role", "unknown")),
+                "concept_id": raster.get("specification_id", raster.get("concept_id", "unknown")),
+                "concept_name": raster.get("label", raster.get("concept_name", raster.get("concept_id", "Unknown"))),
             }
             sample["conflict"] = self._has_conflict(sample)
             samples.append(sample)

@@ -8,8 +8,8 @@ from typing import Annotated
 
 import typer
 
-from ansi_scaler.catalog import load_catalog
 from ansi_scaler.config import RunConfig, load_run_config
+from ansi_scaler.content import load_content
 from ansi_scaler.dataset.compiler import compile_dataset, plan_dataset
 from ansi_scaler.dataset.models import load_dataset_recipe
 from ansi_scaler.dataset.validate import validate_dataset
@@ -25,9 +25,9 @@ from ansi_scaler.stages.verify import run_verify
 
 
 app = typer.Typer(help="Build reproducible synthetic ANSI-art training corpora.", no_args_is_help=True)
-catalog_app = typer.Typer(help="Inspect and validate the source catalogue.")
+content_app = typer.Typer(help="Inspect and validate authored object specifications.")
 prompts_app = typer.Typer(help="Build deterministic generation prompts.")
-app.add_typer(catalog_app, name="catalog")
+app.add_typer(content_app, name="content")
 app.add_typer(prompts_app, name="prompts")
 
 RunConfigOption = Annotated[Path, typer.Option("--run-config", exists=True, dir_okay=False)]
@@ -49,14 +49,14 @@ def _result(stage: str, result: tuple[int, int, int], *, fail_on_record_errors: 
         raise typer.Exit(code=1)
 
 
-@catalog_app.command("validate")
-def catalog_validate(run_config: RunConfigOption) -> None:
-    """Validate concepts, roles, references, and kit budgets."""
+@content_app.command("validate")
+def content_validate(run_config: RunConfigOption) -> None:
+    """Validate the single-path theme/location/object library."""
     config = _config(run_config)
-    catalog = load_catalog(config.catalog_dir)
+    content = load_content(config.content_dir)
+    themes = {location.theme for location in content.locations}
     typer.echo(
-        f"Valid catalogue: {len(catalog.concepts)} concepts, {len(catalog.kits)} kits, "
-        f"{catalog.membership_count} memberships"
+        f"Valid content: {len(content.objects)} objects, {len(content.locations)} locations, {len(themes)} themes"
     )
 
 
@@ -64,9 +64,9 @@ def catalog_validate(run_config: RunConfigOption) -> None:
 def prompts_build(run_config: RunConfigOption) -> None:
     """Build the deterministic JSONL generation-request manifest."""
     config = _config(run_config)
-    catalog = load_catalog(config.catalog_dir)
+    content = load_content(config.content_dir)
     with corpus_lock(config.data_dir, exclusive=False):
-        destination = write_prompt_manifest(config, catalog)
+        destination = write_prompt_manifest(config, content)
     typer.echo(f"Wrote {destination}")
 
 
@@ -200,8 +200,8 @@ def run_pipeline(
         raise typer.BadParameter(f"Expected one of: {', '.join(stages)}")
     config = _config(run_config)
     with corpus_lock(config.data_dir, exclusive=False):
-        catalog = load_catalog(config.catalog_dir)
-        write_prompt_manifest(config, catalog)
+        content = load_content(config.content_dir)
+        write_prompt_manifest(config, content)
         if through == "prompts":
             return
         _result("generate", run_generate(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
