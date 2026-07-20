@@ -67,7 +67,7 @@ chuda:
   alpha_bbox_threshold: 1
   crop_padding_fraction: 0.05
 lod:
-  alpha_threshold: 32
+  alpha_threshold: 128
   levels:
     - name: lod-0
       preview_size: 512

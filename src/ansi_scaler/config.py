@@ -90,7 +90,7 @@ class LodLevel(BaseModel):
 
 
 class LodSettings(BaseModel):
-    alpha_threshold: int = Field(default=32, ge=1, le=255)
+    alpha_threshold: int = Field(default=128, ge=1, le=255)
     levels: list[LodLevel]
 
 
