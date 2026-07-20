@@ -39,11 +39,16 @@ class FakePipeline:
 
 
 def test_background_provider_settings_are_provider_specific() -> None:
+    defaults = BackgroundSettings()
+    assert defaults.provider == "lucida-transformers"
+    assert defaults.model == "egeorcun/lucida"
+    assert defaults.revision == "28632b8fefc5431cfc1e42ed9d6123d785ea49ad"
+
     lucida = BackgroundSettings(provider="lucida-transformers", model="egeorcun/lucida", revision="pinned-revision")
     assert lucida.sha256 is None
     assert lucida.model_path is None
     with pytest.raises(ValidationError, match="pinned revision"):
-        BackgroundSettings(provider="lucida-transformers", model="egeorcun/lucida")
+        BackgroundSettings(provider="lucida-transformers", model="egeorcun/lucida", revision=None)
 
 
 def test_fake_end_to_end_stages(tmp_path: Path) -> None:
@@ -51,6 +56,13 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
     config.data_dir = tmp_path / "data"
     config.limit = 1
     config.sana.device = "cpu"
+    config.background = BackgroundSettings(
+        provider="rembg-onnx",
+        model="birefnet-general",
+        revision=None,
+        sha256="58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c",
+        model_path=Path("~/.u2net/birefnet-general.onnx"),
+    )
     config.manifest_dir.mkdir(parents=True)
     write_jsonl(
         config.manifest_dir / "prompts.jsonl",

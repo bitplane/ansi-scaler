@@ -49,11 +49,11 @@ class SanaSettings(BaseModel):
 
 
 class BackgroundSettings(BaseModel):
-    provider: Literal["rembg-onnx", "lucida-transformers"] = "rembg-onnx"
-    model: str = "birefnet-general"
-    revision: str | None = None
-    sha256: str | None = "58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c"
-    model_path: Path | None = Path("~/.u2net/birefnet-general.onnx")
+    provider: Literal["rembg-onnx", "lucida-transformers"] = "lucida-transformers"
+    model: str = "egeorcun/lucida"
+    revision: str | None = "28632b8fefc5431cfc1e42ed9d6123d785ea49ad"
+    sha256: str | None = None
+    model_path: Path | None = None
     input_size: int = Field(default=1024, ge=64)
     device: str = "cuda"
     dtype: Literal["float32", "float16", "bfloat16"] = "float32"
