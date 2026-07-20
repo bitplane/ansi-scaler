@@ -14,7 +14,7 @@ from ansi_scaler.config import BackgroundSettings
 from ansi_scaler.manifests import read_jsonl, write_jsonl
 from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.classify import Classification, run_classify
-from ansi_scaler.stages.lod import run_lod
+from ansi_scaler.stages.lod import prepare_trace_input, run_lod
 from ansi_scaler.stages.pyramid import (
     INPUT_RASTERIZATION_CONTRACT,
     LOD_BLEND_RADIUS,
@@ -78,6 +78,23 @@ def test_active_lineage_excludes_superseded_rasters_and_backgrounds(tmp_path: Pa
 
     assert [record["id"] for record in active_rasters(config)] == [current_raster_id]
     assert [record["id"] for record in active_backgrounds(config)] == [current_background_id]
+
+
+def test_lod_trace_input_binarizes_alpha_and_clears_hidden_rgb(tmp_path: Path) -> None:
+    source = tmp_path / "source.png"
+    destination = tmp_path / "prepared.png"
+    image = Image.new("RGBA", (3, 1))
+    image.putdata([(10, 20, 30, 0), (40, 50, 60, 31), (70, 80, 90, 32)])
+    image.save(source)
+
+    prepare_trace_input(source, destination, alpha_threshold=32)
+
+    with Image.open(destination) as prepared:
+        assert [prepared.getpixel((x, 0)) for x in range(3)] == [
+            (0, 0, 0, 0),
+            (0, 0, 0, 0),
+            (70, 80, 90, 255),
+        ]
 
 
 def test_background_provider_settings_are_provider_specific() -> None:

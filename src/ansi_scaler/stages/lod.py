@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import cairosvg
+import numpy as np
 import psutil
 import vtracer
+from PIL import Image
 
 from ansi_scaler.active import active_backgrounds
 from ansi_scaler.artifacts import artifact_path, atomic_destination
@@ -14,6 +17,15 @@ from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl, relative_path, resolve_path
 from ansi_scaler.reports import contact_sheet
 from ansi_scaler.runner import run_parallel_stage
+
+
+def prepare_trace_input(source: Path, destination: Path, alpha_threshold: int) -> None:
+    with Image.open(source) as opened:
+        pixels = np.array(opened.convert("RGBA"), copy=True)
+    retained = pixels[:, :, 3] >= alpha_threshold
+    pixels[~retained] = 0
+    pixels[:, :, 3] = np.where(retained, 255, 0)
+    Image.fromarray(pixels, mode="RGBA").save(destination, format="PNG")
 
 
 def lod_worker_count(config: RunConfig) -> int:
@@ -79,13 +91,19 @@ class LodGenerator:
     def __call__(self, source: dict[str, Any]) -> dict[str, Any]:
         output_id = self.output_id(source)
         source_path = resolve_path(source["artifact"], self.config.data_dir)
-        levels = [self._generate_level(source_path, output_id, level) for level in self.settings.levels]
+        work_root = self.config.run_dir / "work" / "lod"
+        work_root.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(prefix=f"{output_id[:12]}-", dir=work_root) as temporary:
+            trace_input = Path(temporary) / "trace-input.png"
+            prepare_trace_input(source_path, trace_input, self.settings.alpha_threshold)
+            levels = [self._generate_level(trace_input, output_id, level) for level in self.settings.levels]
         return {
             **source,
             "id": output_id,
             "parent_id": source["id"],
             "stage": "lod",
             "original": source["artifact"],
+            "alpha_threshold": self.settings.alpha_threshold,
             "levels": levels,
         }
 
