@@ -26,9 +26,9 @@ sana:
     single isolated subject, fully visible with comfortable margin, centered,
     polished cartoon game asset, strong readable silhouette, chunky simple shapes,
     clean crisp edges, vibrant controlled color palette, flat light-gray studio
-    background, even soft lighting, minimal contact shadow, no scenery, no
+    background, even soft lighting, no scenery, no
     surrounding props, no border, no frame, no text, no logo
-  exclusions: [multiple subjects, duplicate object, cropped, cut off, complex background, landscape, room, scenery, pedestal, decorative border, text, letters, logo, watermark, photorealistic]
+  exclusions: [multiple subjects, duplicate object, cropped, cut off, complex background, landscape, room, scenery, pedestal, drop shadow, decorative border, text, letters, logo, watermark, photorealistic]
 background:
   provider: lucida-transformers
   model: egeorcun/lucida

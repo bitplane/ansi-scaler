@@ -24,7 +24,7 @@ class SanaSettings(BaseModel):
     presentation_prompt: str = (
         "single isolated subject, fully visible with comfortable margin, centered, polished cartoon game asset, "
         "strong readable silhouette, chunky simple shapes, clean crisp edges, vibrant controlled color palette, "
-        "flat light-gray studio background, even soft lighting, minimal contact shadow, no scenery, no surrounding "
+        "flat light-gray studio background, even soft lighting, no scenery, no surrounding "
         "props, no border, no frame, no text, no logo"
     )
     exclusions: list[str] = Field(
@@ -38,6 +38,7 @@ class SanaSettings(BaseModel):
             "room",
             "scenery",
             "pedestal",
+            "drop shadow",
             "decorative border",
             "text",
             "letters",
