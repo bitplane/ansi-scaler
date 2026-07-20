@@ -14,12 +14,13 @@ prompts:
   seeds_per_specification: 2
   base_seed: 42000
 sana:
-  model_id: Efficient-Large-Model/Sana_600M_512px_diffusers
-  revision: 2defc07f5fb66d0c53ace051585e9a2cb83f8c15
+  model_id: Efficient-Large-Model/Sana_1600M_512px_diffusers
+  revision: e58e81ec2dc4faf305122872313884df3afeffa8
+  variant: fp16
   width: 512
   height: 512
-  guidance_scale: 5.0
-  inference_steps: 24
+  guidance_scale: 4.5
+  inference_steps: 20
   device: cuda
   presentation_prompt: >-
     single isolated subject, fully visible with comfortable margin, centered,

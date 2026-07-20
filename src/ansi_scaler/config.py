@@ -13,12 +13,13 @@ class PromptSettings(BaseModel):
 
 
 class SanaSettings(BaseModel):
-    model_id: str = "Efficient-Large-Model/Sana_600M_512px_diffusers"
-    revision: str = "2defc07f5fb66d0c53ace051585e9a2cb83f8c15"
+    model_id: str = "Efficient-Large-Model/Sana_1600M_512px_diffusers"
+    revision: str = "e58e81ec2dc4faf305122872313884df3afeffa8"
+    variant: str | None = "fp16"
     width: int = 512
     height: int = 512
-    guidance_scale: float = 5.0
-    inference_steps: int = 24
+    guidance_scale: float = 4.5
+    inference_steps: int = 20
     device: str = "cuda"
     presentation_prompt: str = (
         "single isolated subject, fully visible with comfortable margin, centered, polished cartoon game asset, "

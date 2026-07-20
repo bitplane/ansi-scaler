@@ -38,11 +38,10 @@ class SanaGenerator:
                 dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
             else:
                 dtype = torch.float32
-            self.pipeline = SanaPipeline.from_pretrained(
-                self.settings.model_id,
-                revision=self.settings.revision,
-                torch_dtype=dtype,
-            )
+            load_options = {"revision": self.settings.revision, "torch_dtype": dtype}
+            if self.settings.variant:
+                load_options["variant"] = self.settings.variant
+            self.pipeline = SanaPipeline.from_pretrained(self.settings.model_id, **load_options)
             self.pipeline.to(self.settings.device)
             self._configure_pipeline()
         return self.pipeline
