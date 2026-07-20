@@ -299,3 +299,50 @@ def test_review_falls_back_to_cutout_without_pyramid(tmp_path: Path) -> None:
         assert 'id="ansi-stage"' not in response.text
         assert 'class="selected" data-image="/media/cutout-1"' in response.text
     service.close()
+
+
+def test_review_falls_back_to_generated_raster_without_background(tmp_path: Path) -> None:
+    config = review_config(tmp_path)
+    for name in ("backgrounds.jsonl", "lods.jsonl", "pyramids.jsonl", "classifications.jsonl", "verifications.jsonl"):
+        (config.manifest_dir / name).unlink(missing_ok=True)
+    service = ReviewService(config)
+    sample = service.samples()[0]
+    assert sample["cutout"] is None
+    with TestClient(create_app(config, service=service)) as client:
+        review = client.get("/review")
+        assert review.status_code == 200
+        assert 'class="selected" data-image="/media/raster-1"' in review.text
+        assert 'id="review-image" class="" src="/media/raster-1"' in review.text
+        grid = client.get("/grid")
+        assert grid.status_code == 200
+        assert 'src="/media/raster-1"' in grid.text
+    service.close()
+
+
+def test_review_defaults_to_lod_zero_as_highest_available_visual_stage(tmp_path: Path) -> None:
+    config = review_config(tmp_path)
+    preview = config.artifact_dir / "lods" / "aa" / "lod-0.png"
+    preview.parent.mkdir(parents=True)
+    Image.new("RGBA", (32, 32), (20, 40, 180, 255)).save(preview)
+    write_jsonl(
+        config.manifest_dir / "lods.jsonl",
+        [
+            {
+                "id": "lod-1",
+                "parent_id": "cutout-1",
+                "stage": "lod",
+                "levels": [
+                    {"name": "lod-0", "preview": preview.relative_to(config.data_dir).as_posix()}
+                ],
+            }
+        ],
+    )
+    service = ReviewService(config)
+    with TestClient(create_app(config, service=service)) as client:
+        review = client.get("/review")
+        assert review.status_code == 200
+        assert 'class="selected" data-image="/media/lod-1?level=lod-0"' in review.text
+        assert 'id="review-image" class="" src="/media/lod-1?level=lod-0"' in review.text
+        grid = client.get("/grid")
+        assert 'src="/media/lod-1?level=lod-0"' in grid.text
+    service.close()

@@ -14,7 +14,8 @@
   <div class="card-grid">
     {% for sample in samples %}
     <a class="sample-card" href="/review?sample={{ sample.sample_id }}">
-      <div class="thumb checkerboard">{% if sample.cutout %}<img loading="lazy" src="/media/{{ sample.cutout.id }}" alt="{{ sample.concept_name }}">{% endif %}</div>
+      {% set thumbnail = sample.cutout or sample.raster %}
+      <div class="thumb checkerboard">{% if sample.lod and sample.lod.levels %}<img loading="lazy" src="/media/{{ sample.lod.id }}?level={{ sample.lod.levels[0].name }}" alt="{{ sample.concept_name }}">{% elif thumbnail %}<img loading="lazy" src="/media/{{ thumbnail.id }}" alt="{{ sample.concept_name }}">{% endif %}</div>
       <div class="card-body"><strong>{{ sample.concept_name }}</strong><span>{{ sample.kit_id }} · {{ sample.role }}</span></div>
       <div class="card-state">
         {% if sample.review %}<span class="badge human-{{ sample.review.outcome }}">{{ sample.review.outcome }}</span>{% else %}<span class="badge">unreviewed</span>{% endif %}
