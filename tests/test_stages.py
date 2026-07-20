@@ -25,7 +25,7 @@ from ansi_scaler.stages.pyramid import (
     run_pyramid,
     source_for_width,
 )
-from ansi_scaler.stages.rembg import run_rembg
+from ansi_scaler.stages.background import run_background
 from ansi_scaler.stages.verify import run_verify
 from ansi_scaler.runner import StageInfrastructureError
 
@@ -63,7 +63,7 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
         result.putalpha(Image.new("L", result.size, 255))
         return result
 
-    assert run_rembg(config, session=object(), remove_function=fake_remove) == (1, 0, 0)
+    assert run_background(config, session=object(), remove_function=fake_remove) == (1, 0, 0)
     assert run_lod(config) == (1, 0, 0)
 
     def fake_vlm(_: dict) -> dict:
@@ -115,8 +115,8 @@ def test_classify_continues_after_ollama_retries_are_exhausted(tmp_path: Path) -
         artifact = config.data_dir / f"cutout-{index}.png"
         artifact.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGBA", (16, 16), (20, 40, 60, 255)).save(artifact)
-        records.append({"id": f"cutout-{index}", "stage": "rembg", "artifact": artifact.name})
-    write_jsonl(config.manifest_dir / "cutouts.jsonl", records)
+        records.append({"id": f"cutout-{index}", "stage": "background", "artifact": artifact.name})
+    write_jsonl(config.manifest_dir / "backgrounds.jsonl", records)
     calls = 0
 
     def flaky_vlm(_: dict) -> dict:
@@ -419,7 +419,7 @@ def test_pipeline_can_run_through_pyramid(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(cli, "load_content", lambda _: object())
     monkeypatch.setattr(cli, "write_prompt_manifest", lambda *_: called.append("prompts"))
     monkeypatch.setattr(cli, "run_generate", lambda *_args, **_kwargs: called.append("generate") or (1, 0, 0))
-    monkeypatch.setattr(cli, "run_rembg", lambda *_args, **_kwargs: called.append("rembg") or (0, 1, 0))
+    monkeypatch.setattr(cli, "run_background", lambda *_args, **_kwargs: called.append("background") or (0, 1, 0))
     monkeypatch.setattr(cli, "run_lod", lambda *_args, **_kwargs: called.append("lod") or (1, 0, 0))
     monkeypatch.setattr(cli, "run_pyramid", lambda *_args, **_kwargs: called.append("pyramid") or (1, 0, 0))
 
@@ -429,7 +429,7 @@ def test_pipeline_can_run_through_pyramid(tmp_path: Path, monkeypatch) -> None:
     )
 
     assert result.exit_code == 0
-    assert called == ["prompts", "generate", "rembg", "lod", "pyramid"]
+    assert called == ["prompts", "generate", "background", "lod", "pyramid"]
 
 
 def test_pipeline_can_run_through_verification(tmp_path: Path, monkeypatch) -> None:
@@ -440,7 +440,7 @@ def test_pipeline_can_run_through_verification(tmp_path: Path, monkeypatch) -> N
     monkeypatch.setattr(cli, "load_content", lambda _: object())
     monkeypatch.setattr(cli, "write_prompt_manifest", lambda *_: called.append("prompts"))
     monkeypatch.setattr(cli, "run_generate", lambda *_args, **_kwargs: called.append("generate") or (1, 0, 0))
-    monkeypatch.setattr(cli, "run_rembg", lambda *_args, **_kwargs: called.append("rembg") or (1, 0, 0))
+    monkeypatch.setattr(cli, "run_background", lambda *_args, **_kwargs: called.append("background") or (1, 0, 0))
     monkeypatch.setattr(cli, "run_lod", lambda *_args, **_kwargs: called.append("lod") or (1, 0, 0))
     monkeypatch.setattr(cli, "run_pyramid", lambda *_args, **_kwargs: called.append("pyramid") or (1, 0, 0))
     monkeypatch.setattr(cli, "run_classify", lambda *_args, **_kwargs: called.append("classify") or (1, 0, 0))
@@ -452,4 +452,4 @@ def test_pipeline_can_run_through_verification(tmp_path: Path, monkeypatch) -> N
     )
 
     assert result.exit_code == 0
-    assert called == ["prompts", "generate", "rembg", "lod", "pyramid", "classify", "verify"]
+    assert called == ["prompts", "generate", "background", "lod", "pyramid", "classify", "verify"]

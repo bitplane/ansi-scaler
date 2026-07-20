@@ -467,7 +467,7 @@
     else if (key === '?' || key === '/') submit('review');
     else if (key === 'b') {
       const generated = document.querySelector('.stage-rail button[data-label="Generated raster"]');
-      const cutout = document.querySelector('.stage-rail button[data-label="rembg cutout"]');
+      const cutout = document.querySelector('.stage-rail button[data-label="background cutout"]');
       selectImage(generated?.classList.contains('selected') ? cutout : generated);
     }
     else if (['0', '1', '2', '3'].includes(key)) selectImage(document.querySelector(`.stage-rail button[data-lod="lod-${key}"]`));

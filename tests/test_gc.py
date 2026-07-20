@@ -51,8 +51,8 @@ def gc_fixture(tmp_path: Path):
     cutout = {
         "id": "old-cutout",
         "parent_id": old_raster["id"],
-        "stage": "rembg",
-        "artifact": artifact(config, "cutouts/00/old.png"),
+        "stage": "background",
+        "artifact": artifact(config, "backgrounds/00/old.png"),
     }
     lod = {
         "id": "old-lod",
@@ -87,12 +87,12 @@ def gc_fixture(tmp_path: Path):
     }
     write_jsonl(config.manifest_dir / "prompts.jsonl", [prompt])
     write_jsonl(config.manifest_dir / "rasters.jsonl", [old_raster, stale_raster, shared_raster, current_raster])
-    write_jsonl(config.manifest_dir / "cutouts.jsonl", [cutout])
+    write_jsonl(config.manifest_dir / "backgrounds.jsonl", [cutout])
     write_jsonl(config.manifest_dir / "lods.jsonl", [lod])
     write_jsonl(config.manifest_dir / "pyramids.jsonl", [pyramid])
     write_jsonl(config.manifest_dir / "classifications.jsonl", [classification])
     write_jsonl(config.manifest_dir / "verifications.jsonl", [verification])
-    orphan = config.artifact_dir / "cutouts" / "00" / "orphan.png"
+    orphan = config.artifact_dir / "backgrounds" / "00" / "orphan.png"
     orphan.write_bytes(b"orphan")
     other = config.data_dir / "runs" / "other" / "manifests"
     other.mkdir(parents=True)
@@ -204,7 +204,7 @@ def test_gc_reports_missing_cross_run_artifacts_without_aborting(tmp_path: Path)
 
 def test_gc_prunes_a_broken_target_chain_and_its_descendants(tmp_path: Path) -> None:
     config, config_path, _ = gc_fixture(tmp_path)
-    (config.artifact_dir / "cutouts/00/old.png").unlink()
+    (config.artifact_dir / "backgrounds/00/old.png").unlink()
 
     plan = build_gc_plan(config, config_path)
 

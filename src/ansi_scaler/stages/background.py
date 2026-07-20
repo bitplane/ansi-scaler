@@ -13,7 +13,10 @@ from ansi_scaler.reports import contact_sheet
 from ansi_scaler.runner import StageInfrastructureError, run_stage
 
 
-class BackgroundRemover:
+BACKGROUND_CONTRACT = "background-v1"
+
+
+class BackgroundProcessor:
     def __init__(
         self,
         config: RunConfig,
@@ -23,21 +26,19 @@ class BackgroundRemover:
         force: bool = False,
     ) -> None:
         self.config = config
-        self.settings = config.rembg
+        self.settings = config.background
         self.session = session
         self.remove_function = remove_function
         self.force = force
 
-    def _load_model(self) -> tuple[Any, Any]:
+    def _load_rembg_onnx(self) -> tuple[Any, Any]:
         if self.session is None or self.remove_function is None:
-            # Importing torch first loads the CUDA libraries bundled in the locked
-            # environment, allowing ONNX Runtime to resolve them reliably.
             import torch  # noqa: F401
             import onnxruntime as ort
             from rembg import new_session, remove
 
             if "CUDAExecutionProvider" not in ort.get_available_providers():
-                raise RuntimeError("rembg requires ONNX Runtime's CUDAExecutionProvider, but it is unavailable")
+                raise RuntimeError("rembg-onnx requires ONNX Runtime's CUDAExecutionProvider, but it is unavailable")
             self.session = new_session(
                 self.settings.model,
                 providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
@@ -45,10 +46,10 @@ class BackgroundRemover:
             self.remove_function = remove
             model_path = self.settings.model_path.expanduser()
             if not model_path.exists():
-                raise FileNotFoundError(f"rembg model was not found at {model_path}")
+                raise FileNotFoundError(f"Background model was not found at {model_path}")
             checksum = sha256_file(model_path)
             if checksum != self.settings.sha256:
-                raise ValueError(f"Unexpected rembg model SHA-256: {checksum}")
+                raise ValueError(f"Unexpected background model SHA-256: {checksum}")
         return self.session, self.remove_function
 
     def close(self) -> None:
@@ -62,29 +63,30 @@ class BackgroundRemover:
             torch.cuda.empty_cache()
 
     def output_id(self, source: dict[str, Any]) -> str:
-        return stable_id("rembg-v1", source["id"], self.settings.model_dump(mode="json"))
+        return stable_id(BACKGROUND_CONTRACT, source["id"], self.settings.model_dump(mode="json"))
 
     def __call__(self, source: dict[str, Any]) -> dict[str, Any]:
         output_id = self.output_id(source)
         source_path = resolve_path(source["artifact"], self.config.data_dir)
-        destination = artifact_path(self.config.artifact_dir, "cutouts", output_id, ".png")
+        destination = artifact_path(self.config.artifact_dir, "backgrounds", output_id, ".png")
         if self.force:
             destination.unlink(missing_ok=True)
         if not destination.exists():
             image = Image.open(source_path).convert("RGBA")
             try:
-                session, remove_function = self._load_model()
+                if self.settings.provider != "rembg-onnx":
+                    raise ValueError(f"Unsupported background provider: {self.settings.provider}")
+                session, remove_function = self._load_rembg_onnx()
                 cutout = remove_function(image, session=session, alpha_matting=False)
             except Exception as error:
                 raise StageInfrastructureError(
-                    "rembg could not initialise or run; fix the reported model, memory, or CUDA error and resume"
+                    "Background processing could not initialise or run; fix the model, memory, or CUDA error and resume"
                 ) from error
             with atomic_destination(destination) as temporary:
                 cutout.save(temporary, format="PNG")
 
         with Image.open(destination) as cutout:
-            alpha = cutout.getchannel("A")
-            histogram = alpha.histogram()
+            histogram = cutout.getchannel("A").histogram()
             total = cutout.width * cutout.height
             opaque_fraction = sum(histogram[224:]) / total
             transparent_fraction = sum(histogram[:32]) / total
@@ -93,18 +95,21 @@ class BackgroundRemover:
             **source,
             "id": output_id,
             "parent_id": source["id"],
-            "stage": "rembg",
+            "stage": "background",
+            "contract": BACKGROUND_CONTRACT,
             "source_artifact": source["artifact"],
             "artifact": relative_path(destination, self.config.data_dir),
-            "rembg_model": self.settings.model,
-            "rembg_model_sha256": self.settings.sha256,
+            "background_provider": self.settings.provider,
+            "background_model": self.settings.model,
+            "background_model_sha256": self.settings.sha256,
+            "background_settings": self.settings.model_dump(mode="json"),
             "opaque_fraction": opaque_fraction,
             "transparent_fraction": transparent_fraction,
             "soft_edge_fraction": soft_fraction,
         }
 
 
-def run_rembg(
+def run_background(
     config: RunConfig,
     *,
     limit: int | None = None,
@@ -113,19 +118,19 @@ def run_rembg(
     session: Any | None = None,
     remove_function: Any | None = None,
 ) -> tuple[int, int, int]:
-    processor = BackgroundRemover(config, session=session, remove_function=remove_function, force=force)
-    output = config.manifest_dir / "cutouts.jsonl"
+    processor = BackgroundProcessor(config, session=session, remove_function=remove_function, force=force)
+    output = config.manifest_dir / "backgrounds.jsonl"
     result = run_stage(
         read_jsonl(config.manifest_dir / "rasters.jsonl"),
         output,
-        config.manifest_dir / "cutouts.errors.jsonl",
+        config.manifest_dir / "backgrounds.errors.jsonl",
         processor,
         processor.output_id,
         limit=limit or config.limit,
         force=force,
         retry_errors=retry_errors,
-        stage_name="rembg",
+        stage_name="background",
     )
     paths = [resolve_path(record["artifact"], config.data_dir) for record in read_jsonl(output)]
-    contact_sheet(paths[:100], config.run_dir / "reports" / "cutouts.png")
+    contact_sheet(paths[:100], config.run_dir / "reports" / "backgrounds.png")
     return result

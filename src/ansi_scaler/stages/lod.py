@@ -100,7 +100,7 @@ def run_lod(
     output = config.manifest_dir / "lods.jsonl"
     workers = lod_worker_count(config)
     result = run_parallel_stage(
-        read_jsonl(config.manifest_dir / "cutouts.jsonl"),
+        read_jsonl(config.manifest_dir / "backgrounds.jsonl"),
         output,
         config.manifest_dir / "lods.errors.jsonl",
         processor,

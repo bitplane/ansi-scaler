@@ -5,7 +5,7 @@ The current pipeline creates isolated cartoon game assets and progressively
 simplified image LODs:
 
 ```text
-authored content -> prompts -> Sana raster -> rembg cutout -> VTracer LODs
+authored content -> prompts -> Sana raster -> background cutout -> VTracer LODs
                                                          -> Chuda ANSI pyramids
                                       -> VLM classification -> LLM verification
 ```
@@ -60,7 +60,7 @@ Run ten real records through every stage:
 make smoke
 ```
 
-This downloads the pinned Sana and rembg models and requires a CUDA GPU. The
+This downloads the pinned Sana and background models and requires a CUDA GPU. The
 initial 1,200-image run is resumable through compressed ANSI pyramids, VLM
 classification, and LLM verification:
 
@@ -143,7 +143,7 @@ make review
 ```
 
 Open `http://127.0.0.1:8765`. The review screen compares the generated raster,
-rembg cutout, and LOD previews alongside the VLM observation and verifier
+background cutout, and LOD previews alongside the VLM observation and verifier
 decision. Use `A` to accept, `X` to reject, `?` when unsure, `B` to toggle the
 source image, `1`–`3` for LODs, arrow keys to browse, and `Z` to undo.
 

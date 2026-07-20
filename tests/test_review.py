@@ -23,7 +23,7 @@ def review_config(tmp_path: Path) -> RunConfig:
     config.limit = None
     config.llm.prompt_version = "verifier-v1"
     config.manifest_dir.mkdir(parents=True)
-    artifact = config.artifact_dir / "cutouts" / "aa" / "cutout.png"
+    artifact = config.artifact_dir / "backgrounds" / "aa" / "cutout.png"
     artifact.parent.mkdir(parents=True)
     Image.new("RGBA", (32, 32), (10, 180, 80, 255)).save(artifact)
     raster = config.artifact_dir / "rasters" / "aa" / "raster.png"
@@ -50,14 +50,15 @@ def review_config(tmp_path: Path) -> RunConfig:
         ],
     )
     write_jsonl(
-        config.manifest_dir / "cutouts.jsonl",
+        config.manifest_dir / "backgrounds.jsonl",
         [
             {
                 "id": "cutout-1",
                 "parent_id": "raster-1",
-                "stage": "rembg",
+                "stage": "background",
                 "artifact": artifact.relative_to(config.data_dir).as_posix(),
-                "rembg_model_sha256": config.rembg.sha256,
+                "background_model_sha256": config.background.sha256,
+                "background_settings": config.background.model_dump(mode="json"),
                 "concept_id": "crate",
                 "concept_name": "wooden crate",
                 "kit_id": "village",
@@ -144,7 +145,7 @@ def test_review_lineage_annotation_and_metrics(tmp_path: Path) -> None:
     config = review_config(tmp_path)
     service = ReviewService(config)
     sample = service.samples()[0]
-    source_before = (config.manifest_dir / "cutouts.jsonl").read_bytes()
+    source_before = (config.manifest_dir / "backgrounds.jsonl").read_bytes()
 
     event = service.submit(
         ReviewSubmission(
@@ -158,7 +159,7 @@ def test_review_lineage_annotation_and_metrics(tmp_path: Path) -> None:
 
     assert service.samples()[0]["review"].event_id == event.event_id
     assert service.metrics()["matrix"] == {"unsafe_accept": 1}
-    assert (config.manifest_dir / "cutouts.jsonl").read_bytes() == source_before
+    assert (config.manifest_dir / "backgrounds.jsonl").read_bytes() == source_before
     annotation = json.loads(service.store.annotation_path.read_text().strip())
     assert annotation["outputs"]["verify"] == "verify-1"
     service.close()

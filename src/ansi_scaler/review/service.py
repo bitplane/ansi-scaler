@@ -58,8 +58,8 @@ class ReviewService:
             if raster is None:
                 continue
             cutout = _last(
-                children[(raster["id"], "rembg")],
-                lambda item: item.get("rembg_model_sha256") == self.config.rembg.sha256,
+                children[(raster["id"], "background")],
+                lambda item: item.get("background_settings") == self.config.background.model_dump(mode="json"),
             )
             lod = _last(children[(cutout["id"], "lod")]) if cutout is not None else None
             pyramid = (
@@ -95,7 +95,7 @@ class ReviewService:
                 for key, value in {
                     "prompt": prompt,
                     "generate": raster,
-                    "rembg": cutout,
+                    "background": cutout,
                     "lod": lod,
                     "pyramid": pyramid,
                     "classify": classification,

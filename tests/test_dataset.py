@@ -74,7 +74,7 @@ def test_compile_read_and_validate_tiny_dataset(tmp_path: Path) -> None:
     common = {"concept_id": "thing", "concept_name": "thing", "prompt_id": "family", "prompt": "thing"}
     prompt = {**common, "id": "p", "stage": "prompts"}
     raster = {**common, "id": "g", "parent_id": "p", "stage": "generate"}
-    cutout = {**common, "id": "r", "parent_id": "g", "stage": "rembg"}
+    cutout = {**common, "id": "r", "parent_id": "g", "stage": "background"}
     lod = {**common, "id": "l", "parent_id": "r", "stage": "lod"}
     pyramid = {
         **common,
@@ -103,7 +103,7 @@ def test_compile_read_and_validate_tiny_dataset(tmp_path: Path) -> None:
     for name, records in (
         ("prompts", [prompt]),
         ("rasters", [raster]),
-        ("cutouts", [cutout]),
+        ("backgrounds", [cutout]),
         ("lods", [lod]),
         ("pyramids", [pyramid]),
         ("classifications", [classification]),

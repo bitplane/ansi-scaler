@@ -20,7 +20,7 @@ from ansi_scaler.stages.classify import run_classify
 from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.lod import run_lod
 from ansi_scaler.stages.pyramid import run_pyramid
-from ansi_scaler.stages.rembg import run_rembg
+from ansi_scaler.stages.background import run_background
 from ansi_scaler.stages.verify import run_verify
 
 
@@ -83,17 +83,17 @@ def generate(
         _result("generate", run_generate(config, limit=limit, force=force, retry_errors=retry_errors))
 
 
-@app.command("rembg")
-def remove_background(
+@app.command("background")
+def background(
     run_config: RunConfigOption,
     limit: Annotated[int | None, typer.Option(min=1)] = None,
     force: bool = False,
     retry_errors: bool = False,
 ) -> None:
-    """Remove generated backgrounds with the configured rembg model."""
+    """Extract RGBA subjects with the configured background provider."""
     config = _config(run_config)
     with corpus_lock(config.data_dir, exclusive=False):
-        _result("rembg", run_rembg(config, limit=limit, force=force, retry_errors=retry_errors))
+        _result("background", run_background(config, limit=limit, force=force, retry_errors=retry_errors))
 
 
 @app.command("lod")
@@ -195,7 +195,7 @@ def run_pipeline(
     retry_errors: bool = False,
 ) -> None:
     """Run or resume the corpus pipeline through a named stage."""
-    stages = ["prompts", "generate", "rembg", "lod", "pyramid", "classify", "verify"]
+    stages = ["prompts", "generate", "background", "lod", "pyramid", "classify", "verify"]
     if through not in stages:
         raise typer.BadParameter(f"Expected one of: {', '.join(stages)}")
     config = _config(run_config)
@@ -207,8 +207,10 @@ def run_pipeline(
         _result("generate", run_generate(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
         if through == "generate":
             return
-        _result("rembg", run_rembg(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
-        if through == "rembg":
+        _result(
+            "background", run_background(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False
+        )
+        if through == "background":
             return
         _result("lod", run_lod(config, force=force, retry_errors=retry_errors), fail_on_record_errors=False)
         if through == "lod":

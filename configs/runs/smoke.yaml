@@ -29,7 +29,8 @@ sana:
     background, even soft lighting, minimal contact shadow, no scenery, no
     surrounding props, no border, no frame, no text, no logo
   exclusions: [multiple subjects, duplicate object, cropped, cut off, complex background, landscape, room, scenery, pedestal, decorative border, text, letters, logo, watermark, photorealistic]
-rembg:
+background:
+  provider: rembg-onnx
   model: birefnet-general
   sha256: 58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c
   model_path: ~/.u2net/birefnet-general.onnx

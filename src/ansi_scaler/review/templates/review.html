@@ -25,7 +25,7 @@
 
   <div class="stage-rail">
     {% if sample.raster %}<button data-image="/media/{{ sample.raster.id }}" data-label="Generated raster">Generated <kbd>B</kbd></button>{% endif %}
-    {% if sample.cutout %}<button class="{% if not sample.pyramid %}selected{% endif %}" data-image="/media/{{ sample.cutout.id }}" data-label="rembg cutout">Cutout</button>{% endif %}
+    {% if sample.cutout %}<button class="{% if not sample.pyramid %}selected{% endif %}" data-image="/media/{{ sample.cutout.id }}" data-label="background cutout">Background</button>{% endif %}
     {% if sample.lod %}
       {% for level in sample.lod.levels %}<button data-image="/media/{{ sample.lod.id }}?level={{ level.name }}" data-label="{{ level.name|upper }}" data-lod="{{ level.name }}">{{ level.name|upper }} <kbd>{{ level.name|replace('lod-', '') }}</kbd></button>{% endfor %}
     {% endif %}
@@ -54,7 +54,7 @@
         </div>
       </div>
       {% endif %}
-      <div id="image-label" class="image-label">{% if sample.pyramid %}ANSI pyramid{% else %}rembg cutout{% endif %}</div>
+      <div id="image-label" class="image-label">{% if sample.pyramid %}ANSI pyramid{% else %}background cutout{% endif %}</div>
     </section>
     <aside class="evidence-panel">
       <section>

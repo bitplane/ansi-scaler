@@ -132,7 +132,7 @@ def run_classify(
     request_function: RequestFunction | None = None,
 ) -> tuple[int, int, int]:
     processor = OllamaClassifier(config, request_function=request_function)
-    inputs = read_jsonl(config.manifest_dir / "cutouts.jsonl")
+    inputs = read_jsonl(config.manifest_dir / "backgrounds.jsonl")
     if artifact_ids:
         records = list(inputs)
         inputs = (

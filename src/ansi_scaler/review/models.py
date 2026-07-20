@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, model_validator
 Outcome = Literal["accept", "reject", "review"]
 EventType = Literal["set", "undo"]
 
-STAGES = ("catalog", "prompt", "generate", "rembg", "lod", "pyramid", "classify", "verify")
+STAGES = ("content", "prompt", "generate", "background", "lod", "pyramid", "classify", "verify")
 
 
 class ReviewEvent(BaseModel):

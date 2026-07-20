@@ -48,7 +48,8 @@ class SanaSettings(BaseModel):
     )
 
 
-class RembgSettings(BaseModel):
+class BackgroundSettings(BaseModel):
+    provider: str = Field(default="rembg-onnx", pattern="^rembg-onnx$")
     model: str = "birefnet-general"
     sha256: str = "58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c"
     model_path: Path = Path("~/.u2net/birefnet-general.onnx")
@@ -133,11 +134,11 @@ class ReviewSettings(BaseModel):
             "multiple_assets": ReviewIssueSettings(label="Multiple assets", default_stage="generate"),
             "incoherent_geometry": ReviewIssueSettings(label="Incoherent geometry", default_stage="generate"),
             "cropped_source": ReviewIssueSettings(label="Source is cropped", default_stage="generate"),
-            "missing_parts": ReviewIssueSettings(label="Missing parts", default_stage="rembg"),
-            "mostly_transparent": ReviewIssueSettings(label="Mostly transparent", default_stage="rembg"),
-            "residual_background": ReviewIssueSettings(label="Residual background", default_stage="rembg"),
-            "halo": ReviewIssueSettings(label="Background halo", default_stage="rembg"),
-            "stray_fragments": ReviewIssueSettings(label="Stray fragments", default_stage="rembg"),
+            "missing_parts": ReviewIssueSettings(label="Missing parts", default_stage="background"),
+            "mostly_transparent": ReviewIssueSettings(label="Mostly transparent", default_stage="background"),
+            "residual_background": ReviewIssueSettings(label="Residual background", default_stage="background"),
+            "halo": ReviewIssueSettings(label="Background halo", default_stage="background"),
+            "stray_fragments": ReviewIssueSettings(label="Stray fragments", default_stage="background"),
             "lod_detail_loss": ReviewIssueSettings(label="LOD damage", default_stage="lod"),
             "ansi_render_failure": ReviewIssueSettings(label="ANSI damage", default_stage="pyramid"),
             "prompt_problem": ReviewIssueSettings(label="Prompt problem", default_stage="prompt"),
@@ -155,7 +156,7 @@ class RunConfig(BaseModel):
     limit: int | None = Field(default=None, ge=1)
     prompts: PromptSettings = PromptSettings()
     sana: SanaSettings = SanaSettings()
-    rembg: RembgSettings = RembgSettings()
+    background: BackgroundSettings = BackgroundSettings()
     lod: LodSettings
     resources: ResourceSettings = ResourceSettings()
     vlm: VlmSettings = VlmSettings()

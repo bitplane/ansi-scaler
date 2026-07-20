@@ -17,14 +17,14 @@ from ansi_scaler.stages.classify import OllamaClassifier
 from ansi_scaler.stages.generate import SanaGenerator
 from ansi_scaler.stages.lod import LodGenerator
 from ansi_scaler.stages.pyramid import pyramid_id
-from ansi_scaler.stages.rembg import BackgroundRemover
+from ansi_scaler.stages.background import BackgroundProcessor
 from ansi_scaler.stages.verify import OllamaVerifier
 
 
-KNOWN_STAGES = {"prompts", "generate", "rembg", "lod", "pyramid", "classify", "verify"}
-MANAGED_ARTIFACT_ROOTS = ("rasters", "cutouts", "lod", "pyramids")
-VISUAL_DEPTH = {"generate": 1, "rembg": 2, "lod": 3, "pyramid": 4}
-SEMANTIC_DEPTH = {"generate": 1, "rembg": 2, "classify": 3, "verify": 4}
+KNOWN_STAGES = {"prompts", "generate", "background", "lod", "pyramid", "classify", "verify"}
+MANAGED_ARTIFACT_ROOTS = ("rasters", "backgrounds", "lod", "pyramids")
+VISUAL_DEPTH = {"generate": 1, "background": 2, "lod": 3, "pyramid": 4}
+SEMANTIC_DEPTH = {"generate": 1, "background": 2, "classify": 3, "verify": 4}
 
 
 @dataclass
@@ -64,7 +64,7 @@ def disk_bytes(path: Path) -> int:
 
 def _record_artifacts(record: dict[str, Any]) -> set[str]:
     stage = record.get("stage")
-    if stage in {"generate", "rembg", "pyramid"} and record.get("artifact"):
+    if stage in {"generate", "background", "pyramid"} and record.get("artifact"):
         return {record["artifact"]}
     if stage == "lod":
         return {level[key] for level in record.get("levels", []) for key in ("svg", "preview") if level.get(key)}
@@ -120,13 +120,13 @@ def _root_prompt(record_id: str, records: dict[str, dict[str, Any]]) -> str | No
 
 def _current_ids(prompt: dict[str, Any], config: RunConfig) -> dict[str, str]:
     raster = SanaGenerator(config).output_id(prompt)
-    cutout = BackgroundRemover(config).output_id({"id": raster})
+    cutout = BackgroundProcessor(config).output_id({"id": raster})
     lod = LodGenerator(config).output_id({"id": cutout})
     classification = OllamaClassifier(config).output_id({"id": cutout})
     return {
         "prompts": prompt["id"],
         "generate": raster,
-        "rembg": cutout,
+        "background": cutout,
         "lod": lod,
         "pyramid": pyramid_id({"id": lod}, config),
         "classify": classification,
@@ -212,7 +212,10 @@ def build_gc_plan(config: RunConfig, config_path: Path) -> GcPlan:
         ids = _current_ids(prompt, config)
         expected_ids.update(ids.values())
         retained.add(prompt["id"])
-        for branch in (("generate", "rembg", "lod", "pyramid"), ("generate", "rembg", "classify", "verify")):
+        for branch in (
+            ("generate", "background", "lod", "pyramid"),
+            ("generate", "background", "classify", "verify"),
+        ):
             current_terminal = False
             for stage in branch:
                 record_id = ids[stage]

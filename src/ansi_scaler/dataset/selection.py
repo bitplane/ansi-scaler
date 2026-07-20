@@ -10,7 +10,7 @@ from ansi_scaler.manifests import read_jsonl, resolve_path
 from ansi_scaler.review.models import ReviewEvent
 
 
-VISUAL_STAGES = ("prompt", "generate", "rembg", "lod", "pyramid")
+VISUAL_STAGES = ("prompt", "generate", "background", "lod", "pyramid")
 
 
 def _records(path: Path) -> list[dict[str, Any]]:
@@ -40,7 +40,7 @@ def select_assets(config: RunConfig, pyramid_format: str, *, limit: int | None =
     manifest = config.manifest_dir
     prompts = _records(manifest / "prompts.jsonl")
     generations = _children(_records(manifest / "rasters.jsonl"))
-    cutouts = _children(_records(manifest / "cutouts.jsonl"))
+    backgrounds = _children(_records(manifest / "backgrounds.jsonl"))
     lods = _children(_records(manifest / "lods.jsonl"))
     pyramids = _children(
         [r for r in _records(manifest / "pyramids.jsonl") if r.get("pyramid_format") == pyramid_format]
@@ -52,13 +52,18 @@ def select_assets(config: RunConfig, pyramid_format: str, *, limit: int | None =
     for prompt in prompts[:limit]:
         chain: dict[str, dict[str, Any]] = {"prompt": prompt}
         parent = prompt["id"]
-        for stage, children in (("generate", generations), ("rembg", cutouts), ("lod", lods), ("pyramid", pyramids)):
+        for stage, children in (
+            ("generate", generations),
+            ("background", backgrounds),
+            ("lod", lods),
+            ("pyramid", pyramids),
+        ):
             candidates = children.get(parent, [])
             if not candidates:
                 break
             chain[stage] = candidates[-1]
             parent = candidates[-1]["id"]
-        classifier = classifications.get(chain.get("rembg", {}).get("id", ""), [])
+        classifier = classifications.get(chain.get("background", {}).get("id", ""), [])
         if classifier:
             chain["classify"] = classifier[-1]
             verifier = verifications.get(classifier[-1]["id"], [])
