@@ -10,9 +10,9 @@
     <div><span>Wasted rejects</span><strong class="warning">{{ metrics.matrix.get('wasted_reject', 0) }}</strong><small>good data discarded</small></div>
   </div>
   <div class="metrics-grid">
-    <section class="metric-panel"><h2>Human outcomes</h2>{% for key in ['accept','reject','review'] %}<div class="metric-row"><span>{{ key }}</span><strong>{{ metrics.outcomes.get(key, 0) }}</strong></div>{% endfor %}</section>
+    <section class="metric-panel"><h2>Human outcomes</h2>{% for key in ['accept','reject','unsure'] %}<div class="metric-row"><span>{{ key }}</span><strong>{{ metrics.outcomes.get(key, 0) }}</strong></div>{% endfor %}</section>
     <section class="metric-panel"><h2>Verifier matrix</h2>{% for key, value in metrics.matrix.items() %}<div class="metric-row"><span>{{ key.replace('_',' ') }}</span><strong>{{ value }}</strong></div>{% else %}<p class="muted">No definitive reviews yet.</p>{% endfor %}</section>
-    <section class="metric-panel"><h2>Primary cause</h2>{% for key, value in metrics.causes.items() %}<div class="metric-row"><span>{{ key }}</span><strong>{{ value }}</strong></div>{% else %}<p class="muted">No rejected samples yet.</p>{% endfor %}</section>
+    <section class="metric-panel"><h2>Stage judgments</h2>{% for stage, values in metrics.stage_outcomes.items() %}<div class="version-row"><strong>{{ stage }}</strong>{% for key, value in values.items() %}<span>{{ key }}: {{ value }}</span>{% endfor %}</div>{% else %}<p class="muted">No stage judgments yet.</p>{% endfor %}</section>
     <section class="metric-panel"><h2>Coverage by kit</h2>{% for key, total in metrics.totals_by_kit.items() %}<div class="metric-row"><span>{{ key }}</span><strong>{{ metrics.coverage_by_kit.get(key, 0) }} / {{ total }}</strong></div>{% endfor %}</section>
     <section class="metric-panel wide"><h2>Verifier versions</h2>{% for version, values in metrics.versions.items() %}<div class="version-row"><strong>{{ version }}</strong>{% for key, value in values.items() %}<span>{{ key.replace('_',' ') }}: {{ value }}</span>{% endfor %}</div>{% else %}<p class="muted">No reviewed verifier versions yet.</p>{% endfor %}</section>
   </div>

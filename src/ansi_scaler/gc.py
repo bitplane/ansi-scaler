@@ -101,10 +101,12 @@ def _active_reviews(path: Path) -> list[ReviewEvent]:
     events = [ReviewEvent.model_validate(record) for record in read_jsonl(path)]
     superseded = {event.supersedes for event in events if event.supersedes}
     active = [event for event in events if event.event_type == "set" and event.event_id not in superseded]
-    by_asset: dict[str, ReviewEvent] = {}
+    by_target: dict[tuple[str, str | None], ReviewEvent] = {}
     for event in active:
-        by_asset[event.outputs.get("prompt", event.sample_id)] = event
-    return list(by_asset.values())
+        asset = event.outputs.get("prompt", event.sample_id)
+        key = (asset, event.target_stage if event.schema_version == 3 else None)
+        by_target[key] = event
+    return list(by_target.values())
 
 
 def _root_prompt(record_id: str, records: dict[str, dict[str, Any]]) -> str | None:
@@ -236,7 +238,8 @@ def build_gc_plan(config: RunConfig, config_path: Path) -> GcPlan:
 
     annotations = config.run_dir / "reviews" / "annotations.jsonl"
     for event in _active_reviews(annotations):
-        for record_id in event.outputs.values():
+        references = event.lineage if event.schema_version == 3 else event.outputs
+        for record_id in references.values():
             _mark_with_ancestors(record_id, records, retained)
         reasons["active review"] += 1
 

@@ -10,7 +10,7 @@
   <a class="button secondary" href="/grid">Browse corpus</a>
 </section>
 {% else %}
-<section class="review-shell" data-sample-id="{{ sample.sample_id }}" data-snapshot-id="{{ sample.snapshot_id }}" data-current-event="{{ sample.review.event_id if sample.review else '' }}" data-previous-sample="{{ previous_sample_id or '' }}" data-next-sample="{{ next_sample_id or '' }}">
+<section class="review-shell" data-sample-id="{{ sample.sample_id }}" data-focus-stage="{{ sample.focus_stage or '' }}" data-current-event="{{ sample.review.event_id if sample.review else '' }}" data-previous-sample="{{ previous_sample_id or '' }}" data-next-sample="{{ next_sample_id or '' }}">
   <div class="sample-heading">
     <div>
       <div class="eyebrow">{{ sample.kit_id }} / {{ sample.role }} · {{ sample.sample_id[:10] }}</div>
@@ -24,20 +24,20 @@
   </div>
 
   <div class="stage-rail">
-    {% if sample.raster %}<button class="{% if not sample.cutout and not sample.pyramid %}selected{% endif %}" data-image="/media/{{ sample.raster.id }}" data-label="Generated raster">Generated <kbd>B</kbd></button>{% endif %}
-    {% if sample.cutout %}<button class="{% if not sample.lod and not sample.pyramid %}selected{% endif %}" data-image="/media/{{ sample.cutout.id }}" data-label="background cutout">Background</button>{% endif %}
+    {% if sample.raster %}<button class="{% if sample.focus_stage == 'generate' %}selected{% endif %}" data-image="/media/{{ sample.raster.id }}" data-label="Generated raster" data-review-stage="generate" data-review-output="{{ sample.raster.id }}" data-review-event="{{ sample.reviews.get('generate').event_id if sample.reviews.get('generate') else '' }}">Generated <kbd>B</kbd></button>{% endif %}
+    {% if sample.cutout %}<button class="{% if sample.focus_stage == 'background' %}selected{% endif %}" data-image="/media/{{ sample.cutout.id }}" data-label="background cutout" data-review-stage="background" data-review-output="{{ sample.cutout.id }}" data-review-event="{{ sample.reviews.get('background').event_id if sample.reviews.get('background') else '' }}">Background</button>{% endif %}
     {% if sample.lod %}
-      {% for level in sample.lod.levels %}<button class="{% if loop.first and not sample.pyramid %}selected{% endif %}" data-image="/media/{{ sample.lod.id }}?level={{ level.name }}" data-label="{{ level.name|upper }}" data-lod="{{ level.name }}">{{ level.name|upper }} <kbd>{{ level.name|replace('lod-', '') }}</kbd></button>{% endfor %}
+      {% for level in sample.lod.levels %}<button class="{% if loop.first and sample.focus_stage == 'lod' %}selected{% endif %}" data-image="/media/{{ sample.lod.id }}?level={{ level.name }}" data-label="{{ level.name|upper }}" data-lod="{{ level.name }}" data-review-stage="lod" data-review-output="{{ sample.lod.id }}" data-review-event="{{ sample.reviews.get('lod').event_id if sample.reviews.get('lod') else '' }}">{{ level.name|upper }} <kbd>{{ level.name|replace('lod-', '') }}</kbd></button>{% endfor %}
     {% endif %}
-    {% if sample.pyramid %}<button id="ansi-stage" class="selected" data-pyramid="{{ sample.pyramid.id }}">ANSI</button>{% else %}<span class="stage-status">ANSI pending</span>{% endif %}
+    {% if sample.pyramid %}<button id="ansi-stage" class="{% if sample.focus_stage == 'pyramid' %}selected{% endif %}" data-pyramid="{{ sample.pyramid.id }}" data-review-stage="pyramid" data-review-output="{{ sample.pyramid.id }}" data-review-event="{{ sample.reviews.get('pyramid').event_id if sample.reviews.get('pyramid') else '' }}">ANSI</button>{% else %}<span class="stage-status">ANSI pending</span>{% endif %}
   </div>
 
   <div class="inspection-grid">
     <section class="image-panel checkerboard">
       {% set display_record = sample.cutout or sample.raster %}
-      {% if sample.lod and sample.lod.levels %}<img id="review-image" class="{% if sample.pyramid %}hidden{% endif %}" src="/media/{{ sample.lod.id }}?level={{ sample.lod.levels[0].name }}" alt="Corpus sample">{% elif display_record %}<img id="review-image" class="{% if sample.pyramid %}hidden{% endif %}" src="/media/{{ display_record.id }}" alt="Corpus sample">{% else %}<div class="missing">No image available</div>{% endif %}
+      {% if sample.lod and sample.lod.levels %}<img id="review-image" class="{% if sample.focus_stage == 'pyramid' %}hidden{% endif %}" src="/media/{{ sample.lod.id }}?level={{ sample.lod.levels[0].name }}" alt="Corpus sample">{% elif display_record %}<img id="review-image" class="{% if sample.focus_stage == 'pyramid' %}hidden{% endif %}" src="/media/{{ display_record.id }}" alt="Corpus sample">{% else %}<div class="missing">No image available</div>{% endif %}
       {% if sample.pyramid %}
-      <div id="ansi-view" class="ansi-view fit-mode" data-min-width="{{ sample.pyramid.pyramid_levels[0].width }}" data-max-width="{{ sample.pyramid.pyramid_levels[-1].width }}">
+      <div id="ansi-view" class="ansi-view fit-mode {% if sample.focus_stage != 'pyramid' %}hidden{% endif %}" data-min-width="{{ sample.pyramid.pyramid_levels[0].width }}" data-max-width="{{ sample.pyramid.pyramid_levels[-1].width }}">
         <div id="ansi-viewport" class="ansi-viewport"><div id="ansi-canvas" class="ansi-canvas"><canvas id="ansi-terminal" aria-label="ANSI pyramid rendering"></canvas></div><div id="ansi-loading">loading ANSI…</div></div>
         <div class="ansi-controls">
           <button id="ansi-play" class="terminal-control" title="Play or pause scale animation">▶ <kbd>P</kbd></button>
@@ -58,19 +58,25 @@
       <div id="image-label" class="image-label">{% if sample.pyramid %}ANSI pyramid{% elif sample.lod and sample.lod.levels %}{{ sample.lod.levels[0].name|upper }}{% elif sample.cutout %}background cutout{% else %}Generated raster{% endif %}</div>
     </section>
     <aside class="evidence-panel">
-      <section>
+      <section class="evidence-stage {% if sample.focus_stage == 'classify' %}selected{% endif %}" {% if sample.classification %}data-review-stage="classify" data-review-output="{{ sample.classification.id }}" data-review-event="{{ sample.reviews.get('classify').event_id if sample.reviews.get('classify') else '' }}" tabindex="0"{% endif %}>
         <div class="panel-label">Vision observation</div>
         {% if sample.classification %}
-          <h2>{{ sample.classification.classification.primary_object }}</h2>
-          <p>{{ sample.classification.classification.description }}</p>
+          {% set observation = sample.classification.classification %}
+          <h2>{{ observation.primary_subject or observation.primary_object }}</h2>
+          <p>{{ observation.description }}</p>
           <div class="facts">
-            <span>{{ sample.classification.classification.object_count }} object{% if sample.classification.classification.object_count != 1 %}s{% endif %}</span>
-            <span>{{ (sample.classification.classification.uncertainty * 100)|round|int }}% uncertainty</span>
+            {% if observation.candidate_assets is defined %}
+              <span>{{ observation.candidate_assets|length }} candidate{% if observation.candidate_assets|length != 1 %}s{% endif %}</span>
+              <span>{{ observation.confidence }} confidence</span>
+            {% else %}
+              <span>{{ observation.object_count }} object{% if observation.object_count != 1 %}s{% endif %}</span>
+              <span>{{ (observation.uncertainty * 100)|round|int }}% uncertainty</span>
+            {% endif %}
           </div>
           <small>{{ sample.classification.vlm_model }} · {{ sample.classification.vlm_prompt_version }}</small>
         {% else %}<p class="muted">Classification not available.</p>{% endif %}
       </section>
-      <section>
+      <section class="evidence-stage {% if sample.focus_stage == 'verify' %}selected{% endif %}" {% if sample.verification %}data-review-stage="verify" data-review-output="{{ sample.verification.id }}" data-review-event="{{ sample.reviews.get('verify').event_id if sample.reviews.get('verify') else '' }}" tabindex="0"{% endif %}>
         <div class="panel-label">Verifier</div>
         {% if sample.verification %}
           <h2 class="decision-text-{{ sample.machine_decision }}">{{ sample.machine_decision }}</h2>
@@ -81,27 +87,13 @@
     </aside>
   </div>
 
-  <section id="reject-panel" class="reject-panel hidden">
-    <div class="reject-header"><strong>Why should this be rejected?</strong><span>Choose one primary cause</span></div>
-    <div class="issue-grid">
-      {% for code, details in issues.items() %}
-      <button class="issue" data-issue="{{ code }}" data-default-stage="{{ details[1] }}"><span>{{ details[0] }}</span><small>{{ details[1] }}</small></button>
-      {% endfor %}
-    </div>
-    <div class="reject-footer">
-      <label>Introduced by
-        <select id="cause-stage">{% for stage in stages %}<option value="{{ stage }}">{{ stage }}</option>{% endfor %}</select>
-      </label>
-      <input id="review-notes" placeholder="Optional note">
-      <button id="commit-reject" class="button reject" disabled>Reject and next <kbd>Enter</kbd></button>
-    </div>
-  </section>
-
   <div class="action-bar">
+    <span class="stage-target">Reviewing <strong id="review-target">{{ sample.focus_stage }}</strong></span>
+    <input id="review-notes" class="review-notes" placeholder="Optional note" aria-label="Optional review note">
     <button id="accept" class="action accept"><kbd>A</kbd><span>Accept</span></button>
     <button id="reject" class="action reject"><kbd>X</kbd><span>Reject</span></button>
     <button id="review" class="action defer"><kbd>?</kbd><span>Unsure</span></button>
-    {% if sample.review %}<button id="undo" class="action undo"><kbd>Z</kbd><span>Undo</span></button>{% endif %}
+    <button id="undo" class="action undo {% if not sample.review %}hidden{% endif %}"><kbd>Z</kbd><span>Undo</span></button>
     <span id="save-status"></span>
   </div>
 </section>

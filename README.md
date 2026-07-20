@@ -146,6 +146,10 @@ Open `http://127.0.0.1:8765`. The review screen compares the generated raster,
 background cutout, and LOD previews alongside the VLM observation and verifier
 decision. Use `A` to accept, `X` to reject, `?` when unsure, `B` to toggle the
 source image, `1`–`3` for LODs, arrow keys to browse, and `Z` to undo.
+The visual tabs and the classifier/verifier evidence cards are reviewable stages.
+`A` records acceptance and advances through Generated, Background, LOD,
+Classifier, Verifier, and ANSI; `X` or `?` records the selected stage and moves
+to the next asset. Notes are optional.
 
 When an ANSI pyramid is available it is the default review surface. The scale
 slider selects real stored widths from 2–120; `[` and `]` move one level, and
@@ -161,15 +165,18 @@ pixels when space permits, avoiding an additional browser enlargement pass.
 
 Pipeline stages keep their manifests append-only. Human actions are appended to
 `data/runs/<run>/reviews/annotations.jsonl`; the neighbouring SQLite database is
-a disposable index and can be rebuilt. The default queue prioritises conflicts
-introduced by new resource versions, then randomly samples the least-reviewed
+a disposable index and can be rebuilt. Each judgment records the selected stage
+and its causal lineage. It remains valid across later-stage changes and is queued
+again when its own output or an ancestor changes. The default queue prioritises
+these stale or machine-conflicting judgments, then randomly samples the least-reviewed
 kits, concepts, roles, and machine decisions. Set `ANSI_SCALER_REVIEWER` to
 override the reviewer name recorded in the log.
 
-Each prompt-and-seed record is one stable reviewable asset. Reviewing a newer
-pipeline snapshot supersedes that asset's previous active review while retaining
-the append-only history. Undo removes the new decision without resurrecting the
-older one.
+Each prompt-and-seed record is one stable reviewable asset, with independent
+active judgments per stage. A newer judgment supersedes only the same stage while
+retaining append-only history. Undo removes the new decision without resurrecting
+the older one. Stage-scoped reviews are calibration evidence and do not yet alter
+dataset inclusion; selection continues to use the verifier policy.
 
 ## Corpus garbage collection
 
@@ -207,7 +214,7 @@ make dataset
 make dataset-validate DATASET_DIR=data/datasets/ansi-pyramids-v1/<dataset-id>
 ```
 
-`dataset-plan` is read-only. It reports human-review overrides, provisional verifier decisions, prompt-family splits,
+`dataset-plan` is read-only. It reports legacy whole-asset overrides, provisional verifier decisions, prompt-family splits,
 cell count, and estimated raw tensor size. `dataset` writes content-addressed `.building` output and resumes complete
 shards after interruption. Publication is an atomic rename; an already-published dataset is immutable.
 

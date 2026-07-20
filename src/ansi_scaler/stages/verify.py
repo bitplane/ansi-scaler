@@ -5,7 +5,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, model_validator
 
 from ansi_scaler.active import active_classifications
 from ansi_scaler.config import RunConfig
@@ -15,22 +15,45 @@ from ansi_scaler.runner import run_stage
 from ansi_scaler.stages.ollama import RequestFunction, request_with_retry
 
 
-VERIFIER_PROMPT = """You are a conservative quality gate for a synthetic game-art corpus.
-Compare the requested concept and prompt with an independent vision model's factual observations.
-Reject when the visible primary object is a different kind of object, the result is incoherent, the prompt requests one
-isolated asset but several candidate assets are present, or reported artefacts make it unsuitable. Minor stylistic,
-colour, viewpoint, or decorative differences are acceptable. If evidence is ambiguous or insufficient, choose review,
-never accept. Return only the requested structured result."""
+VERIFIER_PROMPT = """You are a conservative quality gate for a synthetic game-art corpus. Compare the requested semantic
+concept with an independent vision model's factual observations. Judge semantic equivalence rather than exact noun
+matching: synonyms and visible held, mounted, attached, or supporting components can satisfy the concept. The checkerboard
+is a visualization of transparency and is never a background mismatch. Do not judge studio presentation, style scaffolding,
+or other generator instructions that are not present in the semantic request.
+
+Reject clear wrong subjects, genuinely separate candidate alternatives, incoherent generation, or cutout damage that makes
+the asset unusable. Attribute wrong content or incoherent source imagery to generate; attribute missing regions, halos,
+residual backgrounds, stray cutout fragments, or excessive transparency to background. If evidence is ambiguous or
+insufficient choose review, never accept. Return JSON matching the supplied schema only."""
+
+
+Judgment = Literal["match", "mismatch", "uncertain"]
+QualityJudgment = Literal["usable", "unusable", "uncertain"]
 
 
 class Verification(BaseModel):
-    semantic_match: bool
-    cardinality_match: bool
-    visually_usable: bool
+    semantic_match: Judgment
+    cardinality_match: Judgment
+    quality: QualityJudgment
     decision: Literal["accept", "reject", "review"]
-    rejection_reasons: list[str]
+    failed_stage: Literal["generate", "background"] | None
+    reasons: list[str]
     explanation: str
-    uncertainty: float = Field(ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_decision(self) -> Verification:
+        judgments = (self.semantic_match, self.cardinality_match, self.quality)
+        if self.decision == "accept":
+            if judgments != ("match", "match", "usable") or self.failed_stage is not None:
+                raise ValueError("Accepted verification must be an unambiguously usable match")
+        elif self.decision == "reject":
+            if "mismatch" not in judgments and "unusable" not in judgments:
+                raise ValueError("Rejected verification requires a mismatch or unusable result")
+            if self.failed_stage is None:
+                raise ValueError("Rejected verification requires a failed stage")
+        elif "uncertain" not in judgments:
+            raise ValueError("Review verification requires uncertain evidence")
+        return self
 
 
 class OllamaVerifier:
@@ -45,6 +68,7 @@ class OllamaVerifier:
             "model": self.settings.model,
             "prompt_version": self.settings.prompt_version,
             "temperature": self.settings.temperature,
+            "num_predict": self.settings.num_predict,
         }
         return stable_id("llm-verify-v1", source["id"], identity)
 
@@ -61,8 +85,10 @@ class OllamaVerifier:
         evidence = {
             "requested_concept": source.get("label", source.get("concept_name")),
             "requested_concept_id": source.get("specification_id", source.get("concept_id")),
-            "generation_prompt": source["prompt"],
-            "vision_observations": source["classification"],
+            "semantic_prompt": source.get("semantic_prompt", source.get("label", source.get("concept_name"))),
+            "vision_observations": {
+                key: value for key, value in source["classification"].items() if key != "spatial_description"
+            },
         }
         payload = {
             "model": self.settings.model,
@@ -70,9 +96,15 @@ class OllamaVerifier:
             "think": False,
             "format": Verification.model_json_schema(),
             "keep_alive": self.settings.keep_alive,
-            "options": {"temperature": self.settings.temperature},
+            "options": {
+                "temperature": self.settings.temperature,
+                "num_predict": self.settings.num_predict,
+            },
             "messages": [
-                {"role": "system", "content": VERIFIER_PROMPT},
+                {
+                    "role": "system",
+                    "content": f"{VERIFIER_PROMPT}\n\nSchema:\n{json.dumps(Verification.model_json_schema(), sort_keys=True)}",
+                },
                 {"role": "user", "content": json.dumps(evidence, sort_keys=True)},
             ],
         }
@@ -80,21 +112,14 @@ class OllamaVerifier:
             self.request_function, payload, self.settings, service=f"LLM server {self.settings.endpoint}"
         )
         self.used_model = True
-        verification = Verification.model_validate_json(response["message"]["content"])
-        observations = source["classification"]
-        if observations["multiple_candidate_assets"] or observations["object_count"] != 1:
-            verification.cardinality_match = False
-            verification.decision = "reject"
-            reason = f"Vision classifier found {observations['object_count']} separate candidate assets; expected one."
-            if reason not in verification.rejection_reasons:
-                verification.rejection_reasons.append(reason)
-        if verification.decision == "accept" and (
-            not verification.semantic_match
-            or not verification.cardinality_match
-            or not verification.visually_usable
-            or verification.uncertainty >= 0.5
-        ):
-            raise ValueError("Verifier returned an internally inconsistent acceptance")
+        try:
+            verification = Verification.model_validate_json(response["message"]["content"])
+        except Exception as error:
+            raise ValueError(
+                "LLM returned invalid structured output "
+                f"(done_reason={response.get('done_reason')!r}, eval_count={response.get('eval_count')!r}, "
+                f"total_duration_ns={response.get('total_duration')!r})"
+            ) from error
         return {
             **source,
             "id": self.output_id(source),
@@ -105,6 +130,9 @@ class OllamaVerifier:
             "llm_prompt_version": self.settings.prompt_version,
             "eval_duration_ns": response.get("eval_duration"),
             "total_duration_ns": response.get("total_duration"),
+            "prompt_eval_count": response.get("prompt_eval_count"),
+            "eval_count": response.get("eval_count"),
+            "done_reason": response.get("done_reason"),
         }
 
     def close(self) -> None:

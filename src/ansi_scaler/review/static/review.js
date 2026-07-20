@@ -13,11 +13,11 @@
   const ansiSource = document.querySelector('#ansi-source');
   const ansiPlay = document.querySelector('#ansi-play');
   const ansiModes = document.querySelectorAll('#ansi-mode [data-mode]');
-  const rejectPanel = document.querySelector('#reject-panel');
-  const causeStage = document.querySelector('#cause-stage');
-  const commitReject = document.querySelector('#commit-reject');
+  const targetLabel = document.querySelector('#review-target');
+  const notes = document.querySelector('#review-notes');
+  const undo = document.querySelector('#undo');
   const status = document.querySelector('#save-status');
-  let selectedIssue = null;
+  let selectedTarget = null;
   let ansiRequest = null;
   let scrubTimer = null;
   let playing = false;
@@ -371,7 +371,9 @@
     image?.classList.add('hidden');
     ansiView.classList.remove('hidden');
     document.querySelectorAll('.stage-rail button').forEach(item => item.classList.remove('selected'));
+    document.querySelectorAll('.evidence-stage').forEach(item => item.classList.remove('selected'));
     ansiStage.classList.add('selected');
+    setReviewTarget(ansiStage);
     loadAnsi(ansiSlider.value, {stop: false});
   }
 
@@ -384,10 +386,28 @@
     ansiView?.classList.add('hidden');
     imageLabel.textContent = button.dataset.label;
     document.querySelectorAll('.stage-rail button').forEach(item => item.classList.remove('selected'));
+    document.querySelectorAll('.evidence-stage').forEach(item => item.classList.remove('selected'));
     button.classList.add('selected');
+    setReviewTarget(button);
   }
 
-  async function submit(outcome, extras = {}) {
+  function setReviewTarget(element) {
+    if (!element?.dataset.reviewStage || !element?.dataset.reviewOutput) return;
+    selectedTarget = {stage: element.dataset.reviewStage, output: element.dataset.reviewOutput};
+    targetLabel.textContent = selectedTarget.stage === 'pyramid' ? 'ANSI' : selectedTarget.stage;
+    shell.dataset.currentEvent = element.dataset.reviewEvent || '';
+    undo?.classList.toggle('hidden', !shell.dataset.currentEvent);
+  }
+
+  function selectEvidence(element) {
+    if (!element?.dataset.reviewStage) return;
+    document.querySelectorAll('.stage-rail button, .evidence-stage').forEach(item => item.classList.remove('selected'));
+    element.classList.add('selected');
+    setReviewTarget(element);
+  }
+
+  async function submit(outcome) {
+    if (!selectedTarget) return;
     if (status.dataset.busy === 'yes') return;
     status.dataset.busy = 'yes';
     status.textContent = 'saving…';
@@ -397,10 +417,10 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           sample_id: shell.dataset.sampleId,
-          snapshot_id: shell.dataset.snapshotId,
+          target_stage: selectedTarget.stage,
+          target_output_id: selectedTarget.output,
           outcome,
-          notes: document.querySelector('#review-notes')?.value || '',
-          ...extras,
+          notes: notes?.value || '',
         }),
       });
       if (!response.ok) throw new Error((await response.json()).detail || 'Review failed');
@@ -414,6 +434,12 @@
   }
 
   document.querySelectorAll('.stage-rail button').forEach(button => button.addEventListener('click', () => selectImage(button)));
+  document.querySelectorAll('.evidence-stage[data-review-stage]').forEach(element => {
+    element.addEventListener('click', () => selectEvidence(element));
+    element.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') selectEvidence(element);
+    });
+  });
   ansiStage?.addEventListener('click', selectAnsi);
   ansiSlider?.addEventListener('input', () => {
     stopPlayback();
@@ -439,20 +465,10 @@
     stopPlayback();
   });
   document.querySelector('#accept')?.addEventListener('click', () => submit('accept'));
-  document.querySelector('#review')?.addEventListener('click', () => submit('review'));
-  document.querySelector('#reject')?.addEventListener('click', () => {
-    rejectPanel.classList.toggle('hidden');
-    if (!rejectPanel.classList.contains('hidden')) rejectPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
-  });
-  document.querySelectorAll('.issue').forEach(button => button.addEventListener('click', () => {
-    document.querySelectorAll('.issue').forEach(item => item.classList.remove('selected'));
-    button.classList.add('selected');
-    selectedIssue = button.dataset.issue;
-    causeStage.value = button.dataset.defaultStage;
-    commitReject.disabled = false;
-  }));
-  commitReject?.addEventListener('click', () => submit('reject', {issue_code: selectedIssue, introduced_by: causeStage.value}));
-  document.querySelector('#undo')?.addEventListener('click', async () => {
+  document.querySelector('#review')?.addEventListener('click', () => submit('unsure'));
+  document.querySelector('#reject')?.addEventListener('click', () => submit('reject'));
+  undo?.addEventListener('click', async () => {
+    if (!shell.dataset.currentEvent) return;
     const response = await fetch('/api/reviews/undo', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({event_id: shell.dataset.currentEvent}),
     });
@@ -463,8 +479,8 @@
     if (event.target.matches('input, select, textarea')) return;
     const key = event.key.toLowerCase();
     if (key === 'a') submit('accept');
-    else if (key === 'x') document.querySelector('#reject')?.click();
-    else if (key === '?' || key === '/') submit('review');
+    else if (key === 'x') submit('reject');
+    else if (key === '?' || key === '/') submit('unsure');
     else if (key === 'b') {
       const generated = document.querySelector('.stage-rail button[data-label="Generated raster"]');
       const cutout = document.querySelector('.stage-rail button[data-label="background cutout"]');
@@ -475,11 +491,14 @@
     else if (key === '[' && ansiView && !ansiView.classList.contains('hidden')) loadAnsi(Number(ansiSlider.value) - 1);
     else if (key === ']' && ansiView && !ansiView.classList.contains('hidden')) loadAnsi(Number(ansiSlider.value) + 1);
     else if (key === 'z') document.querySelector('#undo')?.click();
-    else if (event.key === 'Enter' && selectedIssue) commitReject?.click();
     else if (event.key === 'ArrowRight' && shell.dataset.nextSample) window.location.href = `/review?sample=${shell.dataset.nextSample}`;
     else if (event.key === 'ArrowLeft' && shell.dataset.previousSample) window.location.href = `/review?sample=${shell.dataset.previousSample}`;
-    else if (event.key === 'Escape') rejectPanel.classList.add('hidden');
   });
+
+  const initialTarget = document.querySelector(`[data-review-stage="${shell.dataset.focusStage}"]`);
+  if (initialTarget?.id === 'ansi-stage') setReviewTarget(initialTarget);
+  else if (initialTarget?.classList.contains('evidence-stage')) selectEvidence(initialTarget);
+  else if (initialTarget) selectImage(initialTarget);
 
   if (ansiView) {
     const remembered = Number(localStorage.getItem('ansi-review-width') || 40);

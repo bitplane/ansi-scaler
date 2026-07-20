@@ -7,7 +7,7 @@
     {% for key in ['kit_id', 'role', 'concept_id', 'machine_decision'] %}
     <label>{{ key.replace('_', ' ') }}<select name="{{ key }}"><option value="">All</option>{% for value in options[key] %}<option value="{{ value }}" {% if filters.get(key) == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
     {% endfor %}
-    <label>Status<select name="status"><option value="">All</option>{% for value in ['unreviewed','accept','reject','review'] %}<option value="{{ value }}" {% if filters.get('status') == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+    <label>Status<select name="status"><option value="">All</option>{% for value in ['unreviewed','accept','reject','unsure'] %}<option value="{{ value }}" {% if filters.get('status') == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
     <label>Conflict<select name="conflict"><option value="">All</option><option value="yes" {% if filters.get('conflict') == 'yes' %}selected{% endif %}>Changed/conflicting</option></select></label>
     <button class="button secondary" type="submit">Apply</button>
   </form>

@@ -77,10 +77,14 @@ def review_config(tmp_path: Path) -> RunConfig:
                 "vlm_prompt_version": config.vlm.prompt_version,
                 "vlm_model": "fake-vlm",
                 "classification": {
-                    "primary_object": "crate",
+                    "primary_subject": "crate",
                     "description": "one green crate",
-                    "object_count": 1,
-                    "uncertainty": 0.0,
+                    "candidate_assets": ["green crate"],
+                    "components": [],
+                    "spatial_description": "centered",
+                    "issues": [],
+                    "confidence": "high",
+                    "ambiguities": [],
                 },
             }
         ],
@@ -96,7 +100,11 @@ def verification(record_id: str, version: str, decision: str) -> dict:
         "stage": "verify",
         "llm_prompt_version": version,
         "llm_model": "fake-llm",
-        "verification": {"decision": decision, "explanation": f"machine says {decision}"},
+        "verification": {
+            "decision": decision,
+            "failed_stage": "generate" if decision != "accept" else None,
+            "explanation": f"machine says {decision}",
+        },
     }
 
 
@@ -150,10 +158,9 @@ def test_review_lineage_annotation_and_metrics(tmp_path: Path) -> None:
     event = service.submit(
         ReviewSubmission(
             sample_id=sample["sample_id"],
-            snapshot_id=sample["snapshot_id"],
+            target_stage="generate",
+            target_output_id=sample["outputs"]["generate"],
             outcome="reject",
-            issue_code="wrong_subject",
-            introduced_by="generate",
         )
     )
 
@@ -161,7 +168,7 @@ def test_review_lineage_annotation_and_metrics(tmp_path: Path) -> None:
     assert service.metrics()["matrix"] == {"unsafe_accept": 1}
     assert (config.manifest_dir / "backgrounds.jsonl").read_bytes() == source_before
     annotation = json.loads(service.store.annotation_path.read_text().strip())
-    assert annotation["outputs"]["verify"] == "verify-1"
+    assert annotation["lineage"] == {"prompt": "prompt-1", "generate": "raster-1"}
     service.close()
 
     reopened = ReviewService(config)
@@ -206,10 +213,9 @@ def test_changed_model_conflict_is_prioritised(tmp_path: Path) -> None:
     service.submit(
         ReviewSubmission(
             sample_id=old["sample_id"],
-            snapshot_id=old["snapshot_id"],
+            target_stage="generate",
+            target_output_id=old["outputs"]["generate"],
             outcome="reject",
-            issue_code="wrong_subject",
-            introduced_by="generate",
         )
     )
     write_jsonl(
@@ -219,7 +225,7 @@ def test_changed_model_conflict_is_prioritised(tmp_path: Path) -> None:
     config.llm.prompt_version = "verifier-v2"
     service.store.refresh_manifests()
 
-    queued = service.queue()
+    queued = service.queue(include_reviewed=True)
 
     assert queued[0]["outputs"]["verify"] == "verify-2"
     assert queued[0]["conflict"] is True
@@ -231,7 +237,12 @@ def test_new_snapshot_review_supersedes_prior_asset_review_without_resurrection(
     service = ReviewService(config)
     old = service.samples()[0]
     first = service.submit(
-        ReviewSubmission(sample_id=old["sample_id"], snapshot_id=old["snapshot_id"], outcome="accept")
+        ReviewSubmission(
+            sample_id=old["sample_id"],
+            target_stage="verify",
+            target_output_id=old["outputs"]["verify"],
+            outcome="accept",
+        )
     )
     write_jsonl(
         config.manifest_dir / "verifications.jsonl",
@@ -242,13 +253,92 @@ def test_new_snapshot_review_supersedes_prior_asset_review_without_resurrection(
     current = service.samples()[0]
 
     second = service.submit(
-        ReviewSubmission(sample_id=current["sample_id"], snapshot_id=current["snapshot_id"], outcome="accept")
+        ReviewSubmission(
+            sample_id=current["sample_id"],
+            target_stage="verify",
+            target_output_id=current["outputs"]["verify"],
+            outcome="accept",
+        )
     )
 
     assert second.supersedes == first.event_id
     assert [event.event_id for event in service.store.active_reviews()] == [second.event_id]
     service.undo(second.event_id)
     assert service.store.active_reviews() == []
+    service.close()
+
+
+def test_accepting_machine_failure_advances_stage_by_stage(tmp_path: Path) -> None:
+    config = review_config(tmp_path)
+    write_jsonl(config.manifest_dir / "verifications.jsonl", [verification("verify-1", "verifier-v1", "reject")])
+    service = ReviewService(config)
+    sample = service.samples()[0]
+
+    assert sample["focus_stage"] == "generate"
+    service.submit(
+        ReviewSubmission(
+            sample_id=sample["sample_id"],
+            target_stage="generate",
+            target_output_id=sample["outputs"]["generate"],
+            outcome="accept",
+        )
+    )
+
+    advanced = service.samples()[0]
+    assert advanced["focus_stage"] == "background"
+    assert advanced["review_complete"] is False
+    assert advanced["conflict"] is True
+    service.close()
+
+
+def test_stage_review_survives_later_change_but_not_ancestor_change(tmp_path: Path) -> None:
+    config = review_config(tmp_path)
+    service = ReviewService(config)
+    sample = service.samples()[0]
+    event = service.submit(
+        ReviewSubmission(
+            sample_id=sample["sample_id"],
+            target_stage="background",
+            target_output_id=sample["outputs"]["background"],
+            outcome="unsure",
+        )
+    )
+
+    write_jsonl(
+        config.manifest_dir / "verifications.jsonl",
+        [verification("verify-1", "verifier-v1", "accept"), verification("verify-2", "verifier-v2", "accept")],
+    )
+    config.llm.prompt_version = "verifier-v2"
+    service.store.refresh_manifests()
+    assert service.samples()[0]["reviews"]["background"].event_id == event.event_id
+
+    background = next(read_jsonl(config.manifest_dir / "backgrounds.jsonl"))
+    write_jsonl(config.manifest_dir / "backgrounds.jsonl", [{**background, "id": "cutout-2"}])
+    service.store.refresh_manifests()
+    changed = service.samples()[0]
+    assert "background" not in changed["reviews"]
+    assert changed["stale_reviews"]["background"].event_id == event.event_id
+    assert changed["focus_stage"] == "background"
+    assert changed["review_complete"] is False
+    service.close()
+
+
+def test_reviews_for_different_stages_coexist(tmp_path: Path) -> None:
+    config = review_config(tmp_path)
+    service = ReviewService(config)
+    sample = service.samples()[0]
+    for stage in ("generate", "background"):
+        service.submit(
+            ReviewSubmission(
+                sample_id=sample["sample_id"],
+                target_stage=stage,
+                target_output_id=sample["outputs"][stage],
+                outcome="accept",
+            )
+        )
+
+    assert {event.target_stage for event in service.store.active_reviews()} == {"generate", "background"}
+    assert set(service.samples()[0]["reviews"]) == {"generate", "background"}
     service.close()
 
 
@@ -281,7 +371,8 @@ def test_review_web_routes_and_safe_media(tmp_path: Path) -> None:
             "/api/reviews",
             json={
                 "sample_id": sample["sample_id"],
-                "snapshot_id": sample["snapshot_id"],
+                "target_stage": "pyramid",
+                "target_output_id": sample["outputs"]["pyramid"],
                 "outcome": "accept",
             },
         )
@@ -297,7 +388,7 @@ def test_review_falls_back_to_cutout_without_pyramid(tmp_path: Path) -> None:
         response = client.get("/review")
         assert response.status_code == 200
         assert 'id="ansi-stage"' not in response.text
-        assert 'class="selected" data-image="/media/cutout-1"' in response.text
+        assert 'class="evidence-stage selected" data-review-stage="verify"' in response.text
     service.close()
 
 
@@ -319,7 +410,7 @@ def test_review_falls_back_to_generated_raster_without_background(tmp_path: Path
     service.close()
 
 
-def test_review_defaults_to_lod_zero_as_highest_available_visual_stage(tmp_path: Path) -> None:
+def test_review_defaults_to_latest_available_stage_without_ansi(tmp_path: Path) -> None:
     config = review_config(tmp_path)
     preview = config.artifact_dir / "lods" / "aa" / "lod-0.png"
     preview.parent.mkdir(parents=True)
@@ -339,7 +430,7 @@ def test_review_defaults_to_lod_zero_as_highest_available_visual_stage(tmp_path:
     with TestClient(create_app(config, service=service)) as client:
         review = client.get("/review")
         assert review.status_code == 200
-        assert 'class="selected" data-image="/media/lod-1?level=lod-0"' in review.text
+        assert 'class="evidence-stage selected" data-review-stage="verify"' in review.text
         assert 'id="review-image" class="" src="/media/lod-1?level=lod-0"' in review.text
         grid = client.get("/grid")
         assert 'src="/media/lod-1?level=lod-0"' in grid.text

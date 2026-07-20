@@ -31,7 +31,8 @@ def _active_reviews(path: Path) -> dict[str, ReviewEvent]:
     superseded = {event.supersedes for event in events if event.supersedes}
     result: dict[str, ReviewEvent] = {}
     for event in events:
-        if event.event_type == "set" and event.event_id not in superseded:
+        # Stage-scoped v3 reviews calibrate the pipeline and do not yet control corpus inclusion.
+        if event.schema_version < 3 and event.event_type == "set" and event.event_id not in superseded:
             result[event.outputs.get("prompt", event.sample_id)] = event
     return result
 

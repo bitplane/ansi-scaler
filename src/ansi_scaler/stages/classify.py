@@ -5,7 +5,7 @@ import io
 import json
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -19,22 +19,51 @@ from ansi_scaler.runner import run_stage
 from ansi_scaler.stages.ollama import RequestFunction, request_with_retry
 
 
-CLASSIFIER_PROMPT = """Inspect this isolated game-art cutout rendered over a checkerboard.
-Describe only what is visibly present. Do not infer the requested prompt or decide whether the image should be accepted.
-Count separate candidate assets, not architectural parts or decorations. A collection intentionally joined into one object
-is one asset; a sprite sheet or several alternative renderings contains multiple assets. Report visible incoherence,
-unexplained geometry, residual background, damaged/missing regions, halos, stray fragments, text, or watermarks.
-Use uncertainty when the primary object cannot be identified confidently."""
+CLASSIFIER_PROMPT = """You are a factual visual observer for isolated game-art cutouts.
+Describe only what is visibly present. Do not infer the requested prompt and do not decide whether the asset should be
+accepted. The gray checkerboard is the viewer's visualization of transparent pixels: never describe it as an image
+background, residual background, or artefact. Refer to it only as transparency when that fact matters.
+
+A candidate asset is an independent alternative, duplicate, or sprite-sheet item. Held, mounted, attached, decorative,
+or supporting parts belong in components and are not additional candidate assets. For example, a knight and held shield,
+armour on a display stand, a drone with a mounted camera, grouped mushrooms, and a rock with attached moss are each one
+candidate asset. List visible problems only; do not add boilerplate claims that text, damage, or other problems are absent.
+Keep primary_subject as a short noun phrase. Put orientation, placement, pose, and part relationships in
+spatial_description. Use low confidence and ambiguities when identification is genuinely unclear.
+
+Return JSON matching this schema exactly:
+{schema}"""
+
+
+IssueKind = Literal[
+    "incoherent_geometry",
+    "missing_or_damaged_parts",
+    "residual_background",
+    "halo",
+    "stray_fragment",
+    "extraneous_object",
+    "visible_text",
+    "watermark",
+    "cropped",
+    "mostly_transparent",
+    "unrecognizable",
+]
+
+
+class IssueObservation(BaseModel):
+    kind: IssueKind
+    evidence: str = Field(min_length=1)
 
 
 class Classification(BaseModel):
-    description: str
-    primary_object: str
-    object_count: int = Field(ge=0)
-    multiple_candidate_assets: bool
-    visually_coherent: bool
-    artifact_flags: list[str]
-    uncertainty: float = Field(ge=0.0, le=1.0)
+    primary_subject: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    candidate_assets: list[str] = Field(min_length=1)
+    components: list[str]
+    spatial_description: str = Field(min_length=1)
+    issues: list[IssueObservation]
+    confidence: Literal["high", "medium", "low"]
+    ambiguities: list[str]
 
 
 class OllamaClassifier:
@@ -54,6 +83,7 @@ class OllamaClassifier:
             "model": self.settings.model,
             "prompt_version": self.settings.prompt_version,
             "temperature": self.settings.temperature,
+            "num_predict": self.settings.num_predict,
         }
         return stable_id("vlm-classify-v1", source["id"], identity)
 
@@ -79,13 +109,19 @@ class OllamaClassifier:
         payload = {
             "model": self.settings.model,
             "stream": False,
+            "think": False,
             "format": Classification.model_json_schema(),
             "keep_alive": self.settings.keep_alive,
-            "options": {"temperature": self.settings.temperature},
+            "options": {
+                "temperature": self.settings.temperature,
+                "num_predict": self.settings.num_predict,
+            },
             "messages": [
                 {
                     "role": "user",
-                    "content": CLASSIFIER_PROMPT,
+                    "content": CLASSIFIER_PROMPT.format(
+                        schema=json.dumps(Classification.model_json_schema(), sort_keys=True)
+                    ),
                     "images": [self._checkerboard_png(image)],
                 }
             ],
@@ -94,7 +130,14 @@ class OllamaClassifier:
             self.request_function, payload, self.settings, service=f"VLM server {self.settings.endpoint}"
         )
         self.used_model = True
-        classification = Classification.model_validate_json(response["message"]["content"])
+        try:
+            classification = Classification.model_validate_json(response["message"]["content"])
+        except Exception as error:
+            raise ValueError(
+                "VLM returned invalid structured output "
+                f"(done_reason={response.get('done_reason')!r}, eval_count={response.get('eval_count')!r}, "
+                f"total_duration_ns={response.get('total_duration')!r})"
+            ) from error
         return {
             **source,
             "id": self.output_id(source),
@@ -105,6 +148,9 @@ class OllamaClassifier:
             "vlm_prompt_version": self.settings.prompt_version,
             "eval_duration_ns": response.get("eval_duration"),
             "total_duration_ns": response.get("total_duration"),
+            "prompt_eval_count": response.get("prompt_eval_count"),
+            "eval_count": response.get("eval_count"),
+            "done_reason": response.get("done_reason"),
         }
 
     def close(self) -> None:

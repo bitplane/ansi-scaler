@@ -136,7 +136,9 @@ def test_active_review_pins_an_older_chain(tmp_path: Path) -> None:
         reviewer="tester",
         run=config.name,
         sample_id="prompt-1",
-        snapshot_id="snapshot",
+        target_stage="generate",
+        target_output_id="stale-raster",
+        lineage={"prompt": "prompt-1", "generate": "stale-raster"},
         outputs={"prompt": "prompt-1", "generate": "stale-raster"},
         outcome="accept",
     )

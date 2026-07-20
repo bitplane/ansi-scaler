@@ -12,7 +12,7 @@ from ansi_scaler.config import RunConfig
 from ansi_scaler.review.models import ReviewEvent
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class ReviewStore:
@@ -87,6 +87,8 @@ class ReviewStore:
                 outcome TEXT,
                 issue_code TEXT,
                 introduced_by TEXT,
+                target_stage TEXT,
+                target_output_id TEXT,
                 supersedes TEXT,
                 payload TEXT NOT NULL
             );
@@ -199,8 +201,8 @@ class ReviewStore:
             """
             INSERT OR IGNORE INTO review_events(
                 event_id, event_type, recorded_at, reviewer, run, sample_id, snapshot_id,
-                outcome, issue_code, introduced_by, supersedes, payload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                outcome, issue_code, introduced_by, target_stage, target_output_id, supersedes, payload
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.event_id,
@@ -213,6 +215,8 @@ class ReviewStore:
                 event.outcome,
                 event.issue_code,
                 event.introduced_by,
+                event.target_stage,
+                event.target_output_id,
                 event.supersedes,
                 json.dumps(event.model_dump(mode="json"), sort_keys=True, ensure_ascii=False),
             ),
@@ -252,10 +256,11 @@ class ReviewStore:
         events = self.review_events()
         superseded = {event.supersedes for event in events if event.supersedes}
         active = [event for event in events if event.event_type == "set" and event.event_id not in superseded]
-        by_asset: dict[str, ReviewEvent] = {}
+        by_target: dict[tuple[str, str | None], ReviewEvent] = {}
         for event in active:
-            by_asset[self.asset_id(event)] = event
-        return list(by_asset.values())
+            key = (self.asset_id(event), event.target_stage if event.schema_version == 3 else None)
+            by_target[key] = event
+        return list(by_target.values())
 
     @staticmethod
     def asset_id(event: ReviewEvent) -> str:

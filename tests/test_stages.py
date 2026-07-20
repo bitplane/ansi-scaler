@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -148,11 +149,16 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
     assert run_background(config, session=object(), remove_function=fake_remove) == (1, 0, 0)
     assert run_lod(config) == (1, 0, 0)
 
-    def fake_vlm(_: dict) -> dict:
+    vlm_requests = []
+
+    def fake_vlm(payload: dict) -> dict:
+        vlm_requests.append(payload)
         return {
             "message": {
-                "content": """{"description":"a green object","primary_object":"object","object_count":1,
-                "multiple_candidate_assets":false,"visually_coherent":true,"artifact_flags":[],"uncertainty":0.1}"""
+                "content": """{"primary_subject":"object","description":"a green object",
+                "candidate_assets":["green object","alternate object"],"components":[],
+                "spatial_description":"centered",
+                "issues":[],"confidence":"high","ambiguities":[]}"""
             },
             "eval_duration": 1,
             "total_duration": 2,
@@ -160,13 +166,20 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
 
     assert run_classify(config, request_function=fake_vlm) == (1, 0, 0)
     classification = next(read_jsonl(config.manifest_dir / "classifications.jsonl"))
-    assert classification["classification"]["primary_object"] == "object"
+    assert classification["classification"]["primary_subject"] == "object"
+    assert (
+        "checkerboard is the viewer's visualization of transparent pixels" in vlm_requests[0]["messages"][0]["content"]
+    )
+    assert vlm_requests[0]["options"]["num_predict"] == 512
 
-    def fake_llm(_: dict) -> dict:
+    llm_requests = []
+
+    def fake_llm(payload: dict) -> dict:
+        llm_requests.append(payload)
         return {
             "message": {
-                "content": """{"semantic_match":true,"cardinality_match":true,"visually_usable":true,
-                "decision":"accept","rejection_reasons":[],"explanation":"The object matches.","uncertainty":0.1}"""
+                "content": """{"semantic_match":"match","cardinality_match":"match","quality":"usable",
+                "decision":"accept","failed_stage":null,"reasons":[],"explanation":"The object matches."}"""
             },
             "eval_duration": 1,
             "total_duration": 2,
@@ -175,6 +188,11 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
     assert run_verify(config, request_function=fake_llm) == (1, 0, 0)
     verification = next(read_jsonl(config.manifest_dir / "verifications.jsonl"))
     assert verification["verification"]["decision"] == "accept"
+    verifier_evidence = json.loads(llm_requests[0]["messages"][1]["content"])
+    assert "generation_prompt" not in verifier_evidence
+    assert "semantic_prompt" in verifier_evidence
+    assert "spatial_description" not in verifier_evidence["vision_observations"]
+    assert llm_requests[0]["options"]["num_predict"] == 256
 
     record = next(read_jsonl(config.manifest_dir / "lods.jsonl"))
     assert [level["name"] for level in record["levels"]] == ["lod-0", "lod-1", "lod-2", "lod-3"]
@@ -240,13 +258,14 @@ def test_classify_continues_after_ollama_retries_are_exhausted(tmp_path: Path) -
         return {
             "message": {
                 "content": Classification(
+                    primary_subject="object",
                     description="object",
-                    primary_object="object",
-                    object_count=1,
-                    multiple_candidate_assets=False,
-                    visually_coherent=True,
-                    artifact_flags=[],
-                    uncertainty=0.0,
+                    candidate_assets=["object"],
+                    components=[],
+                    spatial_description="centered",
+                    issues=[],
+                    confidence="high",
+                    ambiguities=[],
                 ).model_dump_json()
             }
         }

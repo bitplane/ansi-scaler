@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ansi_scaler.config import RunConfig
-from ansi_scaler.review.models import STAGES, ReviewSubmission, UndoSubmission
+from ansi_scaler.review.models import ReviewSubmission, UndoSubmission
 from ansi_scaler.review.service import ReviewService
 
 
@@ -44,11 +44,12 @@ def create_app(config: RunConfig, *, service: ReviewService | None = None) -> Fa
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        task = asyncio.create_task(refresh_loop())
+        task = asyncio.create_task(refresh_loop()) if owns_service else None
         yield
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
         if owns_service:
             review_service.close()
 
@@ -79,10 +80,6 @@ def create_app(config: RunConfig, *, service: ReviewService | None = None) -> Fa
             {
                 "sample": selected,
                 "queue_count": len(queue),
-                "issues": {
-                    code: [settings.label, settings.default_stage] for code, settings in config.review.issues.items()
-                },
-                "stages": STAGES,
                 "metrics": review_service.metrics(),
                 "previous_sample_id": navigation[position - 1]["sample_id"] if position > 0 else None,
                 "next_sample_id": navigation[position + 1]["sample_id"]
@@ -100,7 +97,6 @@ def create_app(config: RunConfig, *, service: ReviewService | None = None) -> Fa
         machine_decision: str = "",
         status: str = "",
         conflict: str = "",
-        introduced_by: str = "",
         page: Annotated[int, Query(ge=1)] = 1,
     ):
         filters = {
@@ -112,7 +108,6 @@ def create_app(config: RunConfig, *, service: ReviewService | None = None) -> Fa
                 "machine_decision": machine_decision,
                 "status": status,
                 "conflict": conflict,
-                "introduced_by": introduced_by,
             }.items()
             if value
         }
@@ -135,7 +130,6 @@ def create_app(config: RunConfig, *, service: ReviewService | None = None) -> Fa
                 "has_next": start + page_size < len(all_samples),
                 "filters": filters,
                 "options": options,
-                "stages": STAGES,
             },
         )
 
@@ -167,9 +161,11 @@ def create_app(config: RunConfig, *, service: ReviewService | None = None) -> Fa
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
         queue = review_service.queue()
+        current = review_service.sample(submission.sample_id)
+        continue_current = submission.outcome == "accept" and current is not None and not current["review_complete"]
         return {
             "event_id": event.event_id,
-            "next_sample_id": queue[0]["sample_id"] if queue else None,
+            "next_sample_id": submission.sample_id if continue_current else (queue[0]["sample_id"] if queue else None),
         }
 
     @app.post("/api/reviews/undo")
