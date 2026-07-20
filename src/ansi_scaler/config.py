@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PromptSettings(BaseModel):
@@ -49,10 +49,25 @@ class SanaSettings(BaseModel):
 
 
 class BackgroundSettings(BaseModel):
-    provider: str = Field(default="rembg-onnx", pattern="^rembg-onnx$")
+    provider: Literal["rembg-onnx", "lucida-transformers"] = "rembg-onnx"
     model: str = "birefnet-general"
-    sha256: str = "58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c"
-    model_path: Path = Path("~/.u2net/birefnet-general.onnx")
+    revision: str | None = None
+    sha256: str | None = "58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c"
+    model_path: Path | None = Path("~/.u2net/birefnet-general.onnx")
+    input_size: int = Field(default=1024, ge=64)
+    device: str = "cuda"
+    dtype: Literal["float32", "float16", "bfloat16"] = "float32"
+
+    @model_validator(mode="after")
+    def validate_provider_settings(self) -> BackgroundSettings:
+        if self.provider == "lucida-transformers":
+            if not self.revision:
+                raise ValueError("lucida-transformers requires a pinned revision")
+            self.sha256 = None
+            self.model_path = None
+        elif self.sha256 is None or self.model_path is None:
+            raise ValueError("rembg-onnx requires sha256 and model_path")
+        return self
 
 
 class LodLevel(BaseModel):

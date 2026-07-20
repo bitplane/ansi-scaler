@@ -1,5 +1,5 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
-	deps content prompts generate background lod pyramid classify verify review corpus smoke gc \
+	deps content prompts generate background background-trial lod pyramid classify verify review corpus smoke gc \
 	dataset-plan dataset dataset-validate
 
 RUN_CONFIG ?= configs/runs/first.yaml
@@ -61,6 +61,9 @@ generate: deps  ## Generate Sana rasters (downloads model; CUDA required)
 
 background: .venv/.installed  ## Extract RGBA subjects with the configured provider
 	scripts/background.sh $(RUN_CONFIG)
+
+background-trial: .venv/.installed  ## Compare rembg and Lucida on a spread of generated rasters
+	.venv/bin/ansi-scaler background-trial --run-config $(RUN_CONFIG) --trial configs/trials/background-providers.yaml
 
 lod: .venv/.installed  ## Build SVG LODs and PNG previews with VTracer
 	scripts/lod.sh $(RUN_CONFIG)

@@ -2,11 +2,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import torch
 from PIL import Image
+from pydantic import ValidationError
 from typer.testing import CliRunner
 
 from ansi_scaler import cli
 from ansi_scaler.config import load_run_config
+from ansi_scaler.config import BackgroundSettings
 from ansi_scaler.manifests import read_jsonl, write_jsonl
 from ansi_scaler.stages.generate import run_generate
 from ansi_scaler.stages.classify import Classification, run_classify
@@ -33,6 +36,14 @@ from ansi_scaler.runner import StageInfrastructureError
 class FakePipeline:
     def __call__(self, **_: object) -> SimpleNamespace:
         return SimpleNamespace(images=[Image.new("RGB", (512, 512), "green")])
+
+
+def test_background_provider_settings_are_provider_specific() -> None:
+    lucida = BackgroundSettings(provider="lucida-transformers", model="egeorcun/lucida", revision="pinned-revision")
+    assert lucida.sha256 is None
+    assert lucida.model_path is None
+    with pytest.raises(ValidationError, match="pinned revision"):
+        BackgroundSettings(provider="lucida-transformers", model="egeorcun/lucida")
 
 
 def test_fake_end_to_end_stages(tmp_path: Path) -> None:
@@ -101,6 +112,37 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
         assert (config.data_dir / level["svg"]).exists()
         preview = Image.open(config.data_dir / level["preview"])
         assert preview.size == (level["preview_size"], level["preview_size"])
+
+
+def test_lucida_background_provider_uses_model_alpha(tmp_path: Path) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    config.limit = None
+    config.background.provider = "lucida-transformers"
+    config.background.model = "egeorcun/lucida"
+    config.background.revision = "pinned-revision"
+    config.background.device = "cpu"
+    config.background.dtype = "float32"
+    config.background.input_size = 64
+    config.background.sha256 = None
+    config.background.model_path = None
+    source = config.data_dir / "source.png"
+    source.parent.mkdir(parents=True)
+    Image.new("RGB", (24, 16), "red").save(source)
+    config.manifest_dir.mkdir(parents=True)
+    write_jsonl(config.manifest_dir / "rasters.jsonl", [{"id": "raster", "artifact": "source.png"}])
+
+    class FakeLucida:
+        def __call__(self, tensor: torch.Tensor) -> list[torch.Tensor]:
+            return [torch.zeros((tensor.shape[0], 1, tensor.shape[2], tensor.shape[3]))]
+
+    assert run_background(config, model=FakeLucida()) == (1, 0, 0)
+    record = next(read_jsonl(config.manifest_dir / "backgrounds.jsonl"))
+    assert record["background_provider"] == "lucida-transformers"
+    assert record["background_model_revision"] == "pinned-revision"
+    with Image.open(config.data_dir / record["artifact"]) as result:
+        assert result.size == (24, 16)
+        assert result.getchannel("A").getextrema() == (127, 127)
 
 
 def test_classify_continues_after_ollama_retries_are_exhausted(tmp_path: Path) -> None:

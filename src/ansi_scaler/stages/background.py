@@ -3,6 +3,7 @@ from __future__ import annotations
 import gc
 from typing import Any
 
+import numpy as np
 from PIL import Image
 
 from ansi_scaler.artifacts import artifact_path, atomic_destination
@@ -22,6 +23,7 @@ class BackgroundProcessor:
         config: RunConfig,
         session: Any | None = None,
         remove_function: Any | None = None,
+        model: Any | None = None,
         *,
         force: bool = False,
     ) -> None:
@@ -29,6 +31,7 @@ class BackgroundProcessor:
         self.settings = config.background
         self.session = session
         self.remove_function = remove_function
+        self.model = model
         self.force = force
 
     def _load_rembg_onnx(self) -> tuple[Any, Any]:
@@ -44,6 +47,8 @@ class BackgroundProcessor:
                 providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
             )
             self.remove_function = remove
+            if self.settings.model_path is None or self.settings.sha256 is None:
+                raise ValueError("rembg-onnx requires model_path and sha256")
             model_path = self.settings.model_path.expanduser()
             if not model_path.exists():
                 raise FileNotFoundError(f"Background model was not found at {model_path}")
@@ -52,10 +57,50 @@ class BackgroundProcessor:
                 raise ValueError(f"Unexpected background model SHA-256: {checksum}")
         return self.session, self.remove_function
 
+    def _load_lucida(self) -> Any:
+        if self.model is None:
+            if not self.settings.revision:
+                raise ValueError("lucida-transformers requires a pinned model revision")
+            import torch
+            from transformers import AutoModelForImageSegmentation
+
+            dtype = getattr(torch, self.settings.dtype)
+            self.model = AutoModelForImageSegmentation.from_pretrained(
+                self.settings.model,
+                revision=self.settings.revision,
+                trust_remote_code=True,
+                torch_dtype=dtype,
+            ).to(self.settings.device)
+            self.model.eval()
+        return self.model
+
+    def _remove_lucida(self, image: Image.Image) -> Image.Image:
+        import torch
+        from torch.nn.functional import interpolate
+
+        model = self._load_lucida()
+        rgb = image.convert("RGB")
+        resized = rgb.resize((self.settings.input_size, self.settings.input_size), Image.Resampling.BILINEAR)
+        values = np.asarray(resized, dtype=np.float32) / 255.0
+        tensor = torch.from_numpy(values).permute(2, 0, 1).unsqueeze(0)
+        mean = tensor.new_tensor((0.485, 0.456, 0.406)).view(1, 3, 1, 1)
+        std = tensor.new_tensor((0.229, 0.224, 0.225)).view(1, 3, 1, 1)
+        dtype = getattr(torch, self.settings.dtype)
+        tensor = ((tensor - mean) / std).to(device=self.settings.device, dtype=dtype)
+        with torch.inference_mode():
+            predictions = model(tensor)
+            alpha = predictions[-1].sigmoid()
+            alpha = interpolate(alpha, size=(rgb.height, rgb.width), mode="bilinear", align_corners=False)
+        mask = (alpha[0, 0].float().clamp(0, 1).cpu().numpy() * 255).astype(np.uint8)
+        result = rgb.convert("RGBA")
+        result.putalpha(Image.fromarray(mask, mode="L"))
+        return result
+
     def close(self) -> None:
-        had_model = self.session is not None or self.remove_function is not None
+        had_model = self.session is not None or self.remove_function is not None or self.model is not None
         self.session = None
         self.remove_function = None
+        self.model = None
         gc.collect()
         if had_model:
             import torch
@@ -74,10 +119,13 @@ class BackgroundProcessor:
         if not destination.exists():
             image = Image.open(source_path).convert("RGBA")
             try:
-                if self.settings.provider != "rembg-onnx":
+                if self.settings.provider == "rembg-onnx":
+                    session, remove_function = self._load_rembg_onnx()
+                    cutout = remove_function(image, session=session, alpha_matting=False)
+                elif self.settings.provider == "lucida-transformers":
+                    cutout = self._remove_lucida(image)
+                else:  # pragma: no cover - rejected by configuration validation
                     raise ValueError(f"Unsupported background provider: {self.settings.provider}")
-                session, remove_function = self._load_rembg_onnx()
-                cutout = remove_function(image, session=session, alpha_matting=False)
             except Exception as error:
                 raise StageInfrastructureError(
                     "Background processing could not initialise or run; fix the model, memory, or CUDA error and resume"
@@ -101,6 +149,7 @@ class BackgroundProcessor:
             "artifact": relative_path(destination, self.config.data_dir),
             "background_provider": self.settings.provider,
             "background_model": self.settings.model,
+            "background_model_revision": self.settings.revision,
             "background_model_sha256": self.settings.sha256,
             "background_settings": self.settings.model_dump(mode="json"),
             "opaque_fraction": opaque_fraction,
@@ -117,8 +166,9 @@ def run_background(
     retry_errors: bool = False,
     session: Any | None = None,
     remove_function: Any | None = None,
+    model: Any | None = None,
 ) -> tuple[int, int, int]:
-    processor = BackgroundProcessor(config, session=session, remove_function=remove_function, force=force)
+    processor = BackgroundProcessor(config, session=session, remove_function=remove_function, model=model, force=force)
     output = config.manifest_dir / "backgrounds.jsonl"
     result = run_stage(
         read_jsonl(config.manifest_dir / "rasters.jsonl"),
