@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import gc
+from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
 from PIL import Image
 
+from ansi_scaler.active import active_rasters
 from ansi_scaler.artifacts import artifact_path, atomic_destination
 from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import sha256_file, stable_id
@@ -167,11 +169,12 @@ def run_background(
     session: Any | None = None,
     remove_function: Any | None = None,
     model: Any | None = None,
+    inputs: Iterable[dict[str, Any]] | None = None,
 ) -> tuple[int, int, int]:
     processor = BackgroundProcessor(config, session=session, remove_function=remove_function, model=model, force=force)
     output = config.manifest_dir / "backgrounds.jsonl"
     result = run_stage(
-        read_jsonl(config.manifest_dir / "rasters.jsonl"),
+        inputs if inputs is not None else active_rasters(config),
         output,
         config.manifest_dir / "backgrounds.errors.jsonl",
         processor,
@@ -181,6 +184,11 @@ def run_background(
         retry_errors=retry_errors,
         stage_name="background",
     )
-    paths = [resolve_path(record["artifact"], config.data_dir) for record in read_jsonl(output)]
+    active_parent_ids = {record["id"] for record in active_rasters(config)}
+    paths = [
+        resolve_path(record["artifact"], config.data_dir)
+        for record in read_jsonl(output)
+        if record.get("parent_id") in active_parent_ids
+    ]
     contact_sheet(paths[:100], config.run_dir / "reports" / "backgrounds.png")
     return result

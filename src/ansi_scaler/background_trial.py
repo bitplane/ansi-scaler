@@ -73,7 +73,7 @@ def run_background_trial(config: RunConfig, trial_path: Path, *, force: bool = F
         candidate_config.background = BackgroundSettings.model_validate(candidate["background"])
         candidate_config.manifest_dir.mkdir(parents=True, exist_ok=True)
         write_jsonl(candidate_config.manifest_dir / "rasters.jsonl", sources)
-        run_background(candidate_config, force=force, retry_errors=True)
+        run_background(candidate_config, force=force, retry_errors=True, inputs=sources)
         results[name] = {
             record["parent_id"]: record for record in read_jsonl(candidate_config.manifest_dir / "backgrounds.jsonl")
         }

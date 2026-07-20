@@ -19,16 +19,16 @@ sana:
   variant: fp16
   width: 512
   height: 512
-  guidance_scale: 4.5
+  guidance_scale: 6.0
   inference_steps: 20
   device: cuda
   presentation_prompt: >-
     single isolated subject, fully visible with comfortable margin, centered,
     polished cartoon game asset, strong readable silhouette, chunky simple shapes,
     clean crisp edges, vibrant controlled color palette, flat light-gray studio
-    background, even soft lighting, shadowless, no scenery, no
+    background, even soft lighting, no shadow, no scenery, no
     surrounding props, no border, no frame, no text, no logo
-  exclusions: [multiple subjects, duplicate object, cropped, cut off, complex background, landscape, room, scenery, pedestal, drop shadow, cast shadow, contact shadow, ground shadow, oval shadow, decorative border, text, letters, logo, watermark, photorealistic]
+  exclusions: [multiple subjects, duplicate object, cropped, cut off, complex background, landscape, room, scenery, pedestal, shadow, drop shadow, cast shadow, contact shadow, ground shadow, oval shadow, decorative border, text, letters, logo, watermark, photorealistic]
 background:
   provider: lucida-transformers
   model: egeorcun/lucida

@@ -18,13 +18,13 @@ class SanaSettings(BaseModel):
     variant: str | None = "fp16"
     width: int = 512
     height: int = 512
-    guidance_scale: float = 4.5
+    guidance_scale: float = 6.0
     inference_steps: int = 20
     device: str = "cuda"
     presentation_prompt: str = (
         "single isolated subject, fully visible with comfortable margin, centered, polished cartoon game asset, "
         "strong readable silhouette, chunky simple shapes, clean crisp edges, vibrant controlled color palette, "
-        "flat light-gray studio background, even soft lighting, shadowless, no scenery, no surrounding "
+        "flat light-gray studio background, even soft lighting, no shadow, no scenery, no surrounding "
         "props, no border, no frame, no text, no logo"
     )
     exclusions: list[str] = Field(
@@ -38,6 +38,7 @@ class SanaSettings(BaseModel):
             "room",
             "scenery",
             "pedestal",
+            "shadow",
             "drop shadow",
             "cast shadow",
             "contact shadow",

@@ -10,6 +10,7 @@ from typing import Any
 from PIL import Image
 from pydantic import BaseModel, Field
 
+from ansi_scaler.active import active_backgrounds
 from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl, resolve_path
@@ -132,7 +133,7 @@ def run_classify(
     request_function: RequestFunction | None = None,
 ) -> tuple[int, int, int]:
     processor = OllamaClassifier(config, request_function=request_function)
-    inputs = read_jsonl(config.manifest_dir / "backgrounds.jsonl")
+    inputs = read_jsonl(config.manifest_dir / "backgrounds.jsonl") if artifact_ids else active_backgrounds(config)
     if artifact_ids:
         records = list(inputs)
         inputs = (

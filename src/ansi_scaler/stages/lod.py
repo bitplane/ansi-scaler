@@ -7,6 +7,7 @@ import cairosvg
 import psutil
 import vtracer
 
+from ansi_scaler.active import active_backgrounds
 from ansi_scaler.artifacts import artifact_path, atomic_destination
 from ansi_scaler.config import LodLevel, RunConfig
 from ansi_scaler.identity import stable_id
@@ -100,7 +101,7 @@ def run_lod(
     output = config.manifest_dir / "lods.jsonl"
     workers = lod_worker_count(config)
     result = run_parallel_stage(
-        read_jsonl(config.manifest_dir / "backgrounds.jsonl"),
+        active_backgrounds(config),
         output,
         config.manifest_dir / "lods.errors.jsonl",
         processor,
@@ -111,8 +112,12 @@ def run_lod(
         retry_errors=retry_errors,
         stage_name=f"lod ({workers} workers)",
     )
+    active_ids = {processor.output_id(record) for record in active_backgrounds(config)}
     previews = [
-        resolve_path(level["preview"], config.data_dir) for record in read_jsonl(output) for level in record["levels"]
+        resolve_path(level["preview"], config.data_dir)
+        for record in read_jsonl(output)
+        if record["id"] in active_ids
+        for level in record["levels"]
     ]
     contact_sheet(previews[:100], config.run_dir / "reports" / "lod-previews.png")
     return result

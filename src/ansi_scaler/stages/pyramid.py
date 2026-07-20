@@ -22,6 +22,7 @@ import zstandard
 from PIL import Image
 from tqdm.auto import tqdm
 
+from ansi_scaler.active import active_lods
 from ansi_scaler.artifacts import artifact_path, atomic_destination
 from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import sha256_file, stable_id
@@ -285,7 +286,7 @@ def run_pyramid(
     errors = list(read_jsonl(error_manifest)) if not retry_errors else []
     failed_outputs = {record["output_id"] for record in errors if record.get("output_id")}
     legacy_failed_parents = {record["parent_id"] for record in errors if not record.get("output_id")}
-    unique_records = {record["id"]: record for record in read_jsonl(config.manifest_dir / "lods.jsonl")}
+    unique_records = {record["id"]: record for record in active_lods(config)}
     selected = list(unique_records.values())[: limit or config.limit]
     pending = [
         record

@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from typer.testing import CliRunner
 
 from ansi_scaler import cli
+from ansi_scaler.active import active_backgrounds, active_rasters
 from ansi_scaler.config import load_run_config
 from ansi_scaler.config import BackgroundSettings
 from ansi_scaler.manifests import read_jsonl, write_jsonl
@@ -29,6 +30,8 @@ from ansi_scaler.stages.pyramid import (
     source_for_width,
 )
 from ansi_scaler.stages.background import run_background
+from ansi_scaler.stages.background import BackgroundProcessor
+from ansi_scaler.stages.generate import SanaGenerator
 from ansi_scaler.stages.verify import run_verify
 from ansi_scaler.runner import StageInfrastructureError
 
@@ -36,6 +39,29 @@ from ansi_scaler.runner import StageInfrastructureError
 class FakePipeline:
     def __call__(self, **_: object) -> SimpleNamespace:
         return SimpleNamespace(images=[Image.new("RGB", (512, 512), "green")])
+
+
+def test_active_lineage_excludes_superseded_rasters_and_backgrounds(tmp_path: Path) -> None:
+    config = load_run_config(Path("configs/runs/smoke.yaml"))
+    config.data_dir = tmp_path / "data"
+    config.manifest_dir.mkdir(parents=True)
+    prompt = {"id": "current-prompt", "stage": "prompts"}
+    current_raster_id = SanaGenerator(config).output_id(prompt)
+    current_raster = {"id": current_raster_id, "parent_id": prompt["id"], "stage": "generate"}
+    stale_raster = {"id": "stale-raster", "parent_id": "old-prompt", "stage": "generate"}
+    current_background_id = BackgroundProcessor(config).output_id(current_raster)
+    current_background = {
+        "id": current_background_id,
+        "parent_id": current_raster_id,
+        "stage": "background",
+    }
+    stale_background = {"id": "stale-background", "parent_id": "stale-raster", "stage": "background"}
+    write_jsonl(config.manifest_dir / "prompts.jsonl", [prompt])
+    write_jsonl(config.manifest_dir / "rasters.jsonl", [stale_raster, current_raster])
+    write_jsonl(config.manifest_dir / "backgrounds.jsonl", [stale_background, current_background])
+
+    assert [record["id"] for record in active_rasters(config)] == [current_raster_id]
+    assert [record["id"] for record in active_backgrounds(config)] == [current_background_id]
 
 
 def test_background_provider_settings_are_provider_specific() -> None:
