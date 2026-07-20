@@ -13,11 +13,15 @@ from ansi_scaler.manifests import resolve_path
 from ansi_scaler.review.ansi import PyramidCache, ansi_to_runs
 from ansi_scaler.review.models import ReviewEvent, ReviewSubmission
 from ansi_scaler.review.store import ReviewStore
+from ansi_scaler.stages.background import BackgroundProcessor
+from ansi_scaler.stages.classify import OllamaClassifier
 from ansi_scaler.stages.generate import SanaGenerator
-from ansi_scaler.stages.pyramid import PYRAMID_FORMAT
+from ansi_scaler.stages.lod import LodGenerator
+from ansi_scaler.stages.pyramid import pyramid_id
+from ansi_scaler.stages.verify import OllamaVerifier
 
 
-REVIEW_ORDER = ("generate", "background", "lod", "classify", "verify", "pyramid")
+REVIEW_ORDER = ("generate", "background", "classify", "verify", "lod", "pyramid")
 REVIEW_LINEAGES = {
     "generate": ("prompt", "generate"),
     "background": ("prompt", "generate", "background"),
@@ -26,11 +30,6 @@ REVIEW_LINEAGES = {
     "verify": ("prompt", "generate", "background", "classify", "verify"),
     "pyramid": ("prompt", "generate", "background", "lod", "pyramid"),
 }
-
-
-def _last(records: list[dict[str, Any]], predicate: Any = None) -> dict[str, Any] | None:
-    matching = [record for record in records if predicate is None or predicate(record)]
-    return matching[-1] if matching else (records[-1] if records else None)
 
 
 class ReviewService:
@@ -55,7 +54,6 @@ class ReviewService:
             by_stage[record["stage"]].append(record)
             if record.get("parent_id"):
                 children[(record["parent_id"], record["stage"])].append(record)
-        prompts = {record["id"]: record for record in by_stage["prompts"]}
         active_reviews: dict[str, list[ReviewEvent]] = defaultdict(list)
         for event in self.store.active_reviews():
             active_reviews[self.store.asset_id(event)].append(event)
@@ -63,46 +61,33 @@ class ReviewService:
         for event in self.store.review_events():
             if event.event_type == "set":
                 all_reviews[self.store.asset_id(event)].append(event)
+        errors = {record.get("output_id"): record for record in self.store.errors() if record.get("output_id")}
+
+        generator = SanaGenerator(self.config)
+        backgrounder = BackgroundProcessor(self.config)
+        lod_generator = LodGenerator(self.config)
+        classifier = OllamaClassifier(self.config)
+        verifier = OllamaVerifier(self.config)
 
         samples = []
         for prompt in by_stage["prompts"]:
-            expected_raster = SanaGenerator(self.config).output_id(prompt)
-            raster = _last(children[(prompt["id"], "generate")], lambda item: item["id"] == expected_raster)
-            if raster is None:
-                continue
-            cutout = _last(
-                children[(raster["id"], "background")],
-                lambda item: item.get("background_settings") == self.config.background.model_dump(mode="json"),
-            )
-            lod = _last(children[(cutout["id"], "lod")]) if cutout is not None else None
-            pyramid = (
-                _last(
-                    children[(lod["id"], "pyramid")],
-                    lambda item: (
-                        item.get("chuda_version") == self.config.chuda.version
-                        and item.get("pyramid_format") == PYRAMID_FORMAT
-                    ),
-                )
-                if lod is not None
-                else None
-            )
-            classification = (
-                _last(
-                    children[(cutout["id"], "classify")],
-                    lambda item: item.get("vlm_prompt_version") == self.config.vlm.prompt_version,
-                )
-                if cutout is not None
-                else None
-            )
-            verification = (
-                _last(
-                    children[(classification["id"], "verify")],
-                    lambda item: item.get("llm_prompt_version") == self.config.llm.prompt_version,
-                )
-                if classification is not None
-                else None
-            )
-            prompt = prompts.get(raster.get("parent_id"), prompt)
+            expected: dict[str, str] = {"prompt": prompt["id"], "generate": generator.output_id(prompt)}
+            raster = next((item for item in children[(prompt["id"], "generate")] if item["id"] == expected["generate"]), None)
+            cutout = lod = pyramid = classification = verification = None
+            if raster is not None:
+                expected["background"] = backgrounder.output_id(raster)
+                cutout = next((item for item in children[(raster["id"], "background")] if item["id"] == expected["background"]), None)
+            if cutout is not None:
+                expected["classify"] = classifier.output_id(cutout)
+                expected["lod"] = lod_generator.output_id(cutout)
+                classification = next((item for item in children[(cutout["id"], "classify")] if item["id"] == expected["classify"]), None)
+                lod = next((item for item in children[(cutout["id"], "lod")] if item["id"] == expected["lod"]), None)
+            if classification is not None:
+                expected["verify"] = verifier.output_id(classification)
+                verification = next((item for item in children[(classification["id"], "verify")] if item["id"] == expected["verify"]), None)
+            if lod is not None:
+                expected["pyramid"] = pyramid_id(lod, self.config)
+                pyramid = next((item for item in children[(lod["id"], "pyramid")] if item["id"] == expected["pyramid"]), None)
             records = {
                 key: value
                 for key, value in {
@@ -117,8 +102,14 @@ class ReviewService:
                 if value is not None
             }
             outputs = {stage: record["id"] for stage, record in records.items()}
-            snapshot_id = stable_id("review-snapshot-v1", raster["id"], outputs)
-            asset_id = prompt["id"] if prompt is not None else raster["id"]
+            stage_targets = {stage: output_id for stage, output_id in expected.items() if stage != "prompt"}
+            stage_errors = {
+                stage: errors[output_id]
+                for stage, output_id in stage_targets.items()
+                if output_id in errors and stage not in outputs
+            }
+            snapshot_id = stable_id("review-snapshot-v1", prompt["id"], stage_targets)
+            asset_id = prompt["id"]
             machine_decision = verification.get("verification", {}).get("decision") if verification else "missing"
             current_reviews: dict[str, ReviewEvent] = {}
             stale_reviews: dict[str, ReviewEvent] = {}
@@ -135,8 +126,10 @@ class ReviewService:
                 "sample_id": asset_id,
                 "snapshot_id": snapshot_id,
                 "outputs": outputs,
+                "stage_targets": stage_targets,
+                "stage_errors": stage_errors,
                 "records": records,
-                "prompt": prompt or raster,
+                "prompt": prompt,
                 "raster": raster,
                 "cutout": cutout,
                 "lod": lod,
@@ -149,17 +142,18 @@ class ReviewService:
                 "stale_reviews": stale_reviews,
                 "legacy_review": legacy_review,
                 "history": all_reviews.get(asset_id, []),
-                "kit_id": raster.get("location", raster.get("kit_id", "unknown")),
-                "role": raster.get("theme", raster.get("role", "unknown")),
-                "concept_id": raster.get("specification_id", raster.get("concept_id", "unknown")),
-                "concept_name": raster.get("label", raster.get("concept_name", raster.get("concept_id", "Unknown"))),
+                "kit_id": (raster or prompt).get("location", (raster or prompt).get("kit_id", "unknown")),
+                "role": (raster or prompt).get("theme", (raster or prompt).get("role", "unknown")),
+                "concept_id": (raster or prompt).get("specification_id", (raster or prompt).get("concept_id", "unknown")),
+                "concept_name": (raster or prompt).get("label", (raster or prompt).get("concept_name", (raster or prompt).get("concept_id", "Unknown"))),
             }
             focus_stage, complete = self._review_state(sample)
             sample["focus_stage"] = focus_stage
-            sample["focus_output_id"] = outputs.get(focus_stage) if focus_stage else None
+            sample["focus_output_id"] = stage_targets.get(focus_stage) if focus_stage else None
             sample["review_complete"] = complete
             sample["review"] = current_reviews.get(focus_stage) if focus_stage else legacy_review
             sample["conflict"] = self._has_conflict(sample)
+            sample["stage_tabs"] = self._stage_tabs(sample)
             samples.append(sample)
         self._sample_cache = (self.store.revision, samples)
         return samples
@@ -172,7 +166,7 @@ class ReviewService:
 
     @staticmethod
     def _available_stages(sample: dict[str, Any]) -> list[str]:
-        return [stage for stage in REVIEW_ORDER if stage in sample["outputs"]]
+        return [stage for stage in REVIEW_ORDER if stage in sample["outputs"] or stage in sample["stage_errors"]]
 
     def _review_state(self, sample: dict[str, Any]) -> tuple[str | None, bool]:
         available = self._available_stages(sample)
@@ -187,13 +181,13 @@ class ReviewService:
         stale = [stage for stage in available if stage in sample["stale_reviews"]]
         if stale:
             return stale[0], False
-        failed_stage = None
-        if sample["verification"]:
-            result = sample["verification"].get("verification", {})
-            if result.get("decision") in ("reject", "review"):
-                failed_stage = result.get("failed_stage") or "verify"
-        if failed_stage in available and not (reviews.get(failed_stage) and reviews[failed_stage].outcome == "accept"):
-            return failed_stage, False
+        failures = [stage for stage in available if stage in sample["stage_errors"]]
+        if sample["verification"] and sample["verification"].get("verification", {}).get("decision") in ("reject", "review"):
+            failures.append("verify")
+        failures = sorted(set(failures), key=REVIEW_ORDER.index)
+        for failed_stage in failures:
+            if not (reviews.get(failed_stage) and reviews[failed_stage].outcome == "accept"):
+                return failed_stage, False
         accepted = [stage for stage in available if reviews.get(stage) and reviews[stage].outcome == "accept"]
         if accepted:
             latest = max(accepted, key=REVIEW_ORDER.index)
@@ -202,6 +196,44 @@ class ReviewService:
                 return later[0], False
             return latest, True
         return available[-1], False
+
+    @staticmethod
+    def _stage_tabs(sample: dict[str, Any]) -> list[dict[str, Any]]:
+        labels = {
+            "generate": "Generate",
+            "background": "Background",
+            "classify": "Classify",
+            "verify": "Verify",
+            "lod": "LOD",
+            "pyramid": "ANSI",
+        }
+        tabs = []
+        for stage in REVIEW_ORDER:
+            review = sample["reviews"].get(stage)
+            status = "pending"
+            if stage in sample["outputs"] or stage in sample["stage_errors"]:
+                status = "ready"
+            if stage in sample["stage_errors"]:
+                status = "failed"
+            if stage == "verify" and sample["verification"]:
+                decision = sample["verification"].get("verification", {}).get("decision")
+                if decision in ("reject", "review"):
+                    status = "failed" if decision == "reject" else "unsure"
+            if review:
+                status = {"reject": "failed", "unsure": "unsure", "accept": "accepted"}[review.outcome]
+            tabs.append(
+                {
+                    "stage": stage,
+                    "label": labels[stage],
+                    "status": status,
+                    "selected": stage == sample["focus_stage"],
+                    "disabled": stage not in sample["outputs"] and stage not in sample["stage_errors"],
+                    "output_id": sample["stage_targets"].get(stage),
+                    "event_id": review.event_id if review else "",
+                    "error": sample["stage_errors"].get(stage),
+                }
+            )
+        return tabs
 
     @staticmethod
     def _has_conflict(sample: dict[str, Any]) -> bool:
@@ -262,12 +294,14 @@ class ReviewService:
             raise ValueError("The reviewed sample is unknown")
         if submission.target_stage not in REVIEW_LINEAGES:
             raise ValueError("The reviewed stage is unknown")
-        if sample["outputs"].get(submission.target_stage) != submission.target_output_id:
+        if submission.target_stage not in sample["outputs"] and submission.target_stage not in sample["stage_errors"]:
+            raise ValueError("The reviewed stage has not produced an output or error")
+        if sample["stage_targets"].get(submission.target_stage) != submission.target_output_id:
             raise ValueError("The reviewed stage output is stale or unknown")
         lineage = {
-            stage: sample["outputs"][stage]
+            stage: sample["stage_targets"].get(stage, sample["outputs"].get(stage))
             for stage in REVIEW_LINEAGES[submission.target_stage]
-            if stage in sample["outputs"]
+            if stage in sample["stage_targets"] or stage in sample["outputs"]
         }
         if lineage.get(submission.target_stage) != submission.target_output_id:
             raise ValueError("The reviewed stage does not have a complete lineage")

@@ -24,12 +24,15 @@
   </div>
 
   <div class="stage-rail">
-    {% if sample.raster %}<button class="{% if sample.focus_stage == 'generate' %}selected{% endif %}" data-image="/media/{{ sample.raster.id }}" data-label="Generated raster" data-review-stage="generate" data-review-output="{{ sample.raster.id }}" data-review-event="{{ sample.reviews.get('generate').event_id if sample.reviews.get('generate') else '' }}">Generated <kbd>B</kbd></button>{% endif %}
-    {% if sample.cutout %}<button class="{% if sample.focus_stage == 'background' %}selected{% endif %}" data-image="/media/{{ sample.cutout.id }}" data-label="background cutout" data-review-stage="background" data-review-output="{{ sample.cutout.id }}" data-review-event="{{ sample.reviews.get('background').event_id if sample.reviews.get('background') else '' }}">Background</button>{% endif %}
-    {% if sample.lod %}
-      {% for level in sample.lod.levels %}<button class="{% if loop.first and sample.focus_stage == 'lod' %}selected{% endif %}" data-image="/media/{{ sample.lod.id }}?level={{ level.name }}" data-label="{{ level.name|upper }}" data-lod="{{ level.name }}" data-review-stage="lod" data-review-output="{{ sample.lod.id }}" data-review-event="{{ sample.reviews.get('lod').event_id if sample.reviews.get('lod') else '' }}">{{ level.name|upper }} <kbd>{{ level.name|replace('lod-', '') }}</kbd></button>{% endfor %}
-    {% endif %}
-    {% if sample.pyramid %}<button id="ansi-stage" class="{% if sample.focus_stage == 'pyramid' %}selected{% endif %}" data-pyramid="{{ sample.pyramid.id }}" data-review-stage="pyramid" data-review-output="{{ sample.pyramid.id }}" data-review-event="{{ sample.reviews.get('pyramid').event_id if sample.reviews.get('pyramid') else '' }}">ANSI</button>{% else %}<span class="stage-status">ANSI pending</span>{% endif %}
+    {% for tab in sample.stage_tabs %}
+    <button id="{{ tab.stage }}-stage" class="stage-tab status-{{ tab.status }}{% if tab.selected %} selected{% endif %}"
+      data-review-stage="{{ tab.stage }}" data-review-output="{{ tab.output_id or '' }}" data-review-event="{{ tab.event_id }}"
+      {% if tab.stage == 'generate' and sample.raster %}data-image="/media/{{ sample.raster.id }}" data-label="Generated raster"{% endif %}
+      {% if tab.stage in ('background', 'classify', 'verify') and sample.cutout %}data-image="/media/{{ sample.cutout.id }}" data-label="Background cutout"{% endif %}
+      {% if tab.stage == 'lod' and sample.lod and sample.lod.levels %}data-image="/media/{{ sample.lod.id }}?level={{ sample.lod.levels[0].name }}" data-label="{{ sample.lod.levels[0].name|upper }}"{% endif %}
+      {% if tab.stage == 'pyramid' and sample.pyramid %}data-pyramid="{{ sample.pyramid.id }}"{% endif %}
+      {% if tab.disabled %}disabled aria-disabled="true"{% endif %}>{{ tab.label }}</button>
+    {% endfor %}
   </div>
 
   <div class="inspection-grid">
@@ -55,10 +58,18 @@
         </div>
       </div>
       {% endif %}
+      {% if sample.lod and sample.lod.levels %}
+      <div id="lod-controls" class="lod-controls hidden">
+        <button id="lod-play" class="terminal-control" title="Play or pause LOD animation">▶ <kbd>P</kbd></button>
+        <input id="lod-level" type="range" min="0" max="{{ sample.lod.levels|length - 1 }}" value="0" step="1" aria-label="LOD level">
+        <strong id="lod-name">{{ sample.lod.levels[0].name|upper }}</strong>
+        <script id="lod-levels" type="application/json">{{ sample.lod.levels|tojson }}</script>
+      </div>
+      {% endif %}
       <div id="image-label" class="image-label">{% if sample.pyramid %}ANSI pyramid{% elif sample.lod and sample.lod.levels %}{{ sample.lod.levels[0].name|upper }}{% elif sample.cutout %}background cutout{% else %}Generated raster{% endif %}</div>
     </section>
     <aside class="evidence-panel">
-      <section class="evidence-stage {% if sample.focus_stage == 'classify' %}selected{% endif %}" {% if sample.classification %}data-review-stage="classify" data-review-output="{{ sample.classification.id }}" data-review-event="{{ sample.reviews.get('classify').event_id if sample.reviews.get('classify') else '' }}" tabindex="0"{% endif %}>
+      <section class="evidence-stage {% if sample.focus_stage == 'classify' %}selected{% endif %}{% if sample.focus_stage == 'classify' and sample.stage_errors.get('classify') %} failed{% endif %}" data-evidence-stage="classify">
         <div class="panel-label">Vision observation</div>
         {% if sample.classification %}
           {% set observation = sample.classification.classification %}
@@ -74,28 +85,41 @@
             {% endif %}
           </div>
           <small>{{ sample.classification.vlm_model }} · {{ sample.classification.vlm_prompt_version }}</small>
-        {% else %}<p class="muted">Classification not available.</p>{% endif %}
+        {% elif sample.stage_errors.get('classify') %}{% set error = sample.stage_errors.classify %}
+          <h2 class="decision-text-reject">{{ error.error_type }}</h2><p>{{ error.error }}</p>
+          <details><summary>Partial model output and trace</summary><pre>{{ error.diagnostics|tojson(indent=2) if error.diagnostics else error.traceback }}</pre></details>
+        {% else %}<p class="muted">Classification pending.</p>{% endif %}
       </section>
-      <section class="evidence-stage {% if sample.focus_stage == 'verify' %}selected{% endif %}" {% if sample.verification %}data-review-stage="verify" data-review-output="{{ sample.verification.id }}" data-review-event="{{ sample.reviews.get('verify').event_id if sample.reviews.get('verify') else '' }}" tabindex="0"{% endif %}>
+      <section class="evidence-stage {% if sample.focus_stage == 'verify' %}selected{% endif %}{% if sample.focus_stage == 'verify' and sample.stage_errors.get('verify') %} failed{% endif %}" data-evidence-stage="verify">
         <div class="panel-label">Verifier</div>
         {% if sample.verification %}
           <h2 class="decision-text-{{ sample.machine_decision }}">{{ sample.machine_decision }}</h2>
           <p>{{ sample.verification.verification.explanation }}</p>
           <small>{{ sample.verification.llm_model }} · {{ sample.verification.llm_prompt_version }}</small>
-        {% else %}<p class="muted">Verification not available.</p>{% endif %}
+        {% elif sample.stage_errors.get('verify') %}{% set error = sample.stage_errors.verify %}
+          <h2 class="decision-text-reject">{{ error.error_type }}</h2><p>{{ error.error }}</p>
+          <details><summary>Partial model output and trace</summary><pre>{{ error.diagnostics|tojson(indent=2) if error.diagnostics else error.traceback }}</pre></details>
+        {% else %}<p class="muted">Verification pending.</p>{% endif %}
       </section>
     </aside>
   </div>
 
   <div class="action-bar">
     <span class="stage-target">Reviewing <strong id="review-target">{{ sample.focus_stage }}</strong></span>
-    <input id="review-notes" class="review-notes" placeholder="Optional note" aria-label="Optional review note">
     <button id="accept" class="action accept"><kbd>A</kbd><span>Accept</span></button>
     <button id="reject" class="action reject"><kbd>X</kbd><span>Reject</span></button>
     <button id="review" class="action defer"><kbd>?</kbd><span>Unsure</span></button>
     <button id="undo" class="action undo {% if not sample.review %}hidden{% endif %}"><kbd>Z</kbd><span>Undo</span></button>
     <span id="save-status"></span>
   </div>
+  <dialog id="reject-dialog" class="reject-dialog">
+    <form method="dialog">
+      <h2>Reject <span id="reject-stage-name"></span></h2>
+      <p>Optionally record why this stage failed.</p>
+      <textarea id="reject-notes" rows="5" placeholder="Optional note" aria-label="Rejection note"></textarea>
+      <div class="dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button id="confirm-reject" value="default" class="action reject">Reject</button></div>
+    </form>
+  </dialog>
 </section>
 {% endif %}
 {% endblock %}

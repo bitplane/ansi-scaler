@@ -14,13 +14,21 @@
   const ansiPlay = document.querySelector('#ansi-play');
   const ansiModes = document.querySelectorAll('#ansi-mode [data-mode]');
   const targetLabel = document.querySelector('#review-target');
-  const notes = document.querySelector('#review-notes');
+  const rejectDialog = document.querySelector('#reject-dialog');
+  const rejectNotes = document.querySelector('#reject-notes');
+  const rejectStageName = document.querySelector('#reject-stage-name');
+  const lodControls = document.querySelector('#lod-controls');
+  const lodSlider = document.querySelector('#lod-level');
+  const lodName = document.querySelector('#lod-name');
+  const lodPlay = document.querySelector('#lod-play');
+  const lodLevels = JSON.parse(document.querySelector('#lod-levels')?.textContent || '[]');
   const undo = document.querySelector('#undo');
   const status = document.querySelector('#save-status');
   let selectedTarget = null;
   let ansiRequest = null;
   let scrubTimer = null;
   let playing = false;
+  let lodPlaying = false;
   let ansiLevel = null;
   let ansiCachePyramid = ansiStage?.dataset.pyramid || null;
   const ansiLevelCache = new Map();
@@ -49,6 +57,11 @@
   function stopPlayback() {
     playing = false;
     if (ansiPlay) ansiPlay.firstChild.textContent = '▶ ';
+  }
+
+  function stopLodPlayback() {
+    lodPlaying = false;
+    if (lodPlay) lodPlay.firstChild.textContent = '▶ ';
   }
 
   function sizeTerminal() {
@@ -368,8 +381,10 @@
 
   function selectAnsi() {
     if (!ansiView) return;
+    stopLodPlayback();
     image?.classList.add('hidden');
     ansiView.classList.remove('hidden');
+    lodControls?.classList.add('hidden');
     document.querySelectorAll('.stage-rail button').forEach(item => item.classList.remove('selected'));
     document.querySelectorAll('.evidence-stage').forEach(item => item.classList.remove('selected'));
     ansiStage.classList.add('selected');
@@ -380,14 +395,19 @@
   function selectImage(button) {
     if (!image || !button?.dataset.image) return;
     stopPlayback();
+    if (button.dataset.reviewStage !== 'lod') stopLodPlayback();
     ansiRequest?.abort();
     image.src = button.dataset.image;
     image.classList.remove('hidden');
     ansiView?.classList.add('hidden');
+    lodControls?.classList.toggle('hidden', button.dataset.reviewStage !== 'lod');
     imageLabel.textContent = button.dataset.label;
     document.querySelectorAll('.stage-rail button').forEach(item => item.classList.remove('selected'));
     document.querySelectorAll('.evidence-stage').forEach(item => item.classList.remove('selected'));
     button.classList.add('selected');
+    const evidence = document.querySelector(`[data-evidence-stage="${button.dataset.reviewStage}"]`);
+    evidence?.classList.add('selected');
+    evidence?.classList.toggle('failed', button.classList.contains('status-failed'));
     setReviewTarget(button);
   }
 
@@ -399,14 +419,25 @@
     undo?.classList.toggle('hidden', !shell.dataset.currentEvent);
   }
 
-  function selectEvidence(element) {
-    if (!element?.dataset.reviewStage) return;
-    document.querySelectorAll('.stage-rail button, .evidence-stage').forEach(item => item.classList.remove('selected'));
-    element.classList.add('selected');
-    setReviewTarget(element);
+  function selectStage(button) {
+    if (!button || button.disabled) return;
+    document.querySelectorAll('.evidence-stage').forEach(item => item.classList.remove('selected', 'failed'));
+    if (button.dataset.pyramid) selectAnsi();
+    else selectImage(button);
   }
 
-  async function submit(outcome) {
+  function showLod(index) {
+    if (!lodSlider || !lodLevels.length) return;
+    const bounded = Math.max(0, Math.min(lodLevels.length - 1, Number(index)));
+    lodSlider.value = bounded;
+    const level = lodLevels[bounded];
+    localStorage.setItem('ansi-review-lod-level', String(bounded));
+    image.src = `/media/${document.querySelector('#lod-stage').dataset.reviewOutput}?level=${level.name}`;
+    imageLabel.textContent = level.name.toUpperCase();
+    lodName.textContent = level.name.toUpperCase();
+  }
+
+  async function submit(outcome, notes = '') {
     if (!selectedTarget) return;
     if (status.dataset.busy === 'yes') return;
     status.dataset.busy = 'yes';
@@ -420,7 +451,7 @@
           target_stage: selectedTarget.stage,
           target_output_id: selectedTarget.output,
           outcome,
-          notes: notes?.value || '',
+          notes,
         }),
       });
       if (!response.ok) throw new Error((await response.json()).detail || 'Review failed');
@@ -433,14 +464,10 @@
     }
   }
 
-  document.querySelectorAll('.stage-rail button').forEach(button => button.addEventListener('click', () => selectImage(button)));
-  document.querySelectorAll('.evidence-stage[data-review-stage]').forEach(element => {
-    element.addEventListener('click', () => selectEvidence(element));
-    element.addEventListener('keydown', event => {
-      if (event.key === 'Enter' || event.key === ' ') selectEvidence(element);
-    });
+  document.querySelectorAll('.stage-rail button').forEach(button => button.addEventListener('click', () => selectStage(button)));
+  document.querySelectorAll('.evidence-stage[data-evidence-stage]').forEach(element => {
+    element.addEventListener('click', () => selectStage(document.querySelector(`#${element.dataset.evidenceStage}-stage`)));
   });
-  ansiStage?.addEventListener('click', selectAnsi);
   ansiSlider?.addEventListener('input', () => {
     stopPlayback();
     clearTimeout(scrubTimer);
@@ -464,9 +491,40 @@
     }
     stopPlayback();
   });
+  lodSlider?.addEventListener('input', () => { stopLodPlayback(); showLod(lodSlider.value); });
+  lodPlay?.addEventListener('click', async () => {
+    if (lodPlaying) { stopLodPlayback(); return; }
+    lodPlaying = true;
+    lodPlay.firstChild.textContent = '❚❚ ';
+    let level = Number(lodSlider.value);
+    if (level >= lodLevels.length - 1) level = -1;
+    while (lodPlaying && level < lodLevels.length - 1) {
+      showLod(++level);
+      await new Promise(resolve => setTimeout(resolve, 700));
+    }
+    stopLodPlayback();
+  });
   document.querySelector('#accept')?.addEventListener('click', () => submit('accept'));
   document.querySelector('#review')?.addEventListener('click', () => submit('unsure'));
-  document.querySelector('#reject')?.addEventListener('click', () => submit('reject'));
+  function openRejectDialog() {
+    if (!selectedTarget) return;
+    rejectStageName.textContent = selectedTarget.stage === 'pyramid' ? 'ANSI' : selectedTarget.stage;
+    rejectNotes.value = '';
+    rejectDialog.showModal();
+    rejectNotes.focus();
+  }
+  document.querySelector('#reject')?.addEventListener('click', openRejectDialog);
+  document.querySelector('#confirm-reject')?.addEventListener('click', event => {
+    event.preventDefault();
+    rejectDialog.close();
+    submit('reject', rejectNotes.value);
+  });
+  rejectNotes?.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      document.querySelector('#confirm-reject').click();
+    }
+  });
   undo?.addEventListener('click', async () => {
     if (!shell.dataset.currentEvent) return;
     const response = await fetch('/api/reviews/undo', {
@@ -479,15 +537,18 @@
     if (event.target.matches('input, select, textarea')) return;
     const key = event.key.toLowerCase();
     if (key === 'a') submit('accept');
-    else if (key === 'x') submit('reject');
+    else if (key === 'x') openRejectDialog();
     else if (key === '?' || key === '/') submit('unsure');
     else if (key === 'b') {
       const generated = document.querySelector('.stage-rail button[data-label="Generated raster"]');
       const cutout = document.querySelector('.stage-rail button[data-label="background cutout"]');
       selectImage(generated?.classList.contains('selected') ? cutout : generated);
     }
-    else if (['0', '1', '2', '3'].includes(key)) selectImage(document.querySelector(`.stage-rail button[data-lod="lod-${key}"]`));
+    else if (['0', '1', '2', '3'].includes(key) && lodSlider) { selectStage(document.querySelector('#lod-stage')); showLod(Number(key)); }
+    else if (key === 'p' && lodControls && !lodControls.classList.contains('hidden')) lodPlay?.click();
     else if (key === 'p' && ansiView && !ansiView.classList.contains('hidden')) ansiPlay?.click();
+    else if (key === '[' && lodControls && !lodControls.classList.contains('hidden')) showLod(Number(lodSlider.value) - 1);
+    else if (key === ']' && lodControls && !lodControls.classList.contains('hidden')) showLod(Number(lodSlider.value) + 1);
     else if (key === '[' && ansiView && !ansiView.classList.contains('hidden')) loadAnsi(Number(ansiSlider.value) - 1);
     else if (key === ']' && ansiView && !ansiView.classList.contains('hidden')) loadAnsi(Number(ansiSlider.value) + 1);
     else if (key === 'z') document.querySelector('#undo')?.click();
@@ -496,9 +557,12 @@
   });
 
   const initialTarget = document.querySelector(`[data-review-stage="${shell.dataset.focusStage}"]`);
-  if (initialTarget?.id === 'ansi-stage') setReviewTarget(initialTarget);
-  else if (initialTarget?.classList.contains('evidence-stage')) selectEvidence(initialTarget);
-  else if (initialTarget) selectImage(initialTarget);
+  if (initialTarget) selectStage(initialTarget);
+
+  if (lodSlider) {
+    const rememberedLod = Number(localStorage.getItem('ansi-review-lod-level') || 0);
+    showLod(rememberedLod);
+  }
 
   if (ansiView) {
     const remembered = Number(localStorage.getItem('ansi-review-width') || 40);

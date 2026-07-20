@@ -142,14 +142,13 @@ Start the local review interface without CUDA or Ollama:
 make review
 ```
 
-Open `http://127.0.0.1:8765`. The review screen compares the generated raster,
-background cutout, and LOD previews alongside the VLM observation and verifier
-decision. Use `A` to accept, `X` to reject, `?` when unsure, `B` to toggle the
-source image, `1`–`3` for LODs, arrow keys to browse, and `Z` to undo.
-The visual tabs and the classifier/verifier evidence cards are reviewable stages.
-`A` records acceptance and advances through Generated, Background, LOD,
-Classifier, Verifier, and ANSI; `X` or `?` records the selected stage and moves
-to the next asset. Notes are optional.
+Open `http://127.0.0.1:8765`. Six stage tabs cover Generate, Background,
+Classify, Verify, LOD, and ANSI. The earliest failed stage is selected in red;
+unavailable downstream stages remain visible but disabled. Classify and Verify
+show the cutout while outlining the corresponding evidence panel. Use `A` to
+accept, `X` to open the optional rejection-note dialog, `?` when unsure, arrow
+keys to browse assets, and `Z` to undo. `A` advances in tab order; `X` and `?`
+record the selected stage and move to the next asset.
 
 When an ANSI pyramid is available it is the default review surface. The scale
 slider selects real stored widths from 2–120; `[` and `]` move one level, and
@@ -159,7 +158,8 @@ geometrically synthesizes block, braille, sextant, wedge, and legacy-bar glyphs 
 remain seamless; ordinary text uses the bundled terminal-symbol font. The
 initial width is 40 and browser-local preferences persist between samples.
 Raster and SVG-preview stages always use the same fitted display footprint for
-direct comparison; keys `0`–`3` select the corresponding LOD.
+direct comparison. The single LOD tab has its own discrete slider and playback;
+keys `0`–`3` select levels, `[` and `]` step, and `P` toggles the active player.
 All SVG review previews are rasterized once at 512×512 and displayed at 512 CSS
 pixels when space permits, avoiding an additional browser enlargement pass.
 
