@@ -41,7 +41,7 @@ vlm:
   endpoint: http://127.0.0.1:11434
   prompt_version: cutout-classifier-v2
   temperature: 0.0
-  num_predict: 512
+  num_predict: 4096
   timeout_seconds: 300
   keep_alive: 10m
   retry_attempts: 4

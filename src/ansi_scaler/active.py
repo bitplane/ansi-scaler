@@ -61,6 +61,7 @@ def active_classifications(config: RunConfig) -> list[dict[str, Any]]:
         "model": config.vlm.model,
         "prompt_version": config.vlm.prompt_version,
         "temperature": config.vlm.temperature,
+        "num_predict": config.vlm.num_predict,
     }
     return _expected_children(
         active_backgrounds(config),

@@ -20,14 +20,18 @@ class StageInfrastructureError(RuntimeError):
     """A stage-wide dependency or runtime failure that cannot be fixed by trying another item."""
 
 
-def _error_record(parent_id: str, output_id: str, error: Exception) -> dict[str, str]:
-    return {
+def _error_record(parent_id: str, output_id: str, error: Exception) -> dict[str, Any]:
+    record = {
         "parent_id": parent_id,
         "output_id": output_id,
         "error_type": type(error).__name__,
         "error": str(error),
         "traceback": traceback.format_exc(),
     }
+    diagnostics = getattr(error, "diagnostics", None)
+    if isinstance(diagnostics, dict):
+        record["diagnostics"] = diagnostics
+    return record
 
 
 def run_stage(

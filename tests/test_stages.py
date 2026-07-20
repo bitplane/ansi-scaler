@@ -170,7 +170,7 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
     assert (
         "checkerboard is the viewer's visualization of transparent pixels" in vlm_requests[0]["messages"][0]["content"]
     )
-    assert vlm_requests[0]["options"]["num_predict"] == 512
+    assert vlm_requests[0]["options"]["num_predict"] == 4096
 
     llm_requests = []
 

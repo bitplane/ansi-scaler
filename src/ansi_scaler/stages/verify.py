@@ -12,7 +12,7 @@ from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl
 from ansi_scaler.runner import run_stage
-from ansi_scaler.stages.ollama import RequestFunction, request_with_retry
+from ansi_scaler.stages.ollama import OllamaStructuredOutputError, RequestFunction, request_with_retry
 
 
 VERIFIER_PROMPT = """You are a conservative quality gate for a synthetic game-art corpus. Compare the requested semantic
@@ -115,11 +115,7 @@ class OllamaVerifier:
         try:
             verification = Verification.model_validate_json(response["message"]["content"])
         except Exception as error:
-            raise ValueError(
-                "LLM returned invalid structured output "
-                f"(done_reason={response.get('done_reason')!r}, eval_count={response.get('eval_count')!r}, "
-                f"total_duration_ns={response.get('total_duration')!r})"
-            ) from error
+            raise OllamaStructuredOutputError("LLM", response) from error
         return {
             **source,
             "id": self.output_id(source),

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ansi_scaler.stages.ollama import OllamaRequestError, request_with_retry
+from ansi_scaler.stages.ollama import OllamaRequestError, OllamaStructuredOutputError, request_with_retry
 
 
 def settings(attempts: int = 4) -> SimpleNamespace:
@@ -58,3 +58,19 @@ def test_ollama_request_does_not_retry_non_transient_http_error() -> None:
         request_with_retry(request, {}, settings(), service="test Ollama", sleep=lambda _: None)
 
     assert calls == 1
+
+
+def test_structured_output_error_preserves_partial_response() -> None:
+    error = OllamaStructuredOutputError(
+        "VLM",
+        {
+            "done_reason": "length",
+            "eval_count": 512,
+            "total_duration": 123,
+            "message": {"content": '{"partial":', "thinking": "reasoning trace"},
+        },
+    )
+
+    assert error.diagnostics["partial_content"] == '{"partial":'
+    assert error.diagnostics["thinking"] == "reasoning trace"
+    assert error.diagnostics["done_reason"] == "length"

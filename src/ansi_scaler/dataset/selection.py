@@ -8,6 +8,8 @@ from ansi_scaler.config import RunConfig
 from ansi_scaler.identity import stable_id
 from ansi_scaler.manifests import read_jsonl, resolve_path
 from ansi_scaler.review.models import ReviewEvent
+from ansi_scaler.stages.classify import OllamaClassifier
+from ansi_scaler.stages.verify import OllamaVerifier
 
 
 VISUAL_STAGES = ("prompt", "generate", "background", "lod", "pyramid")
@@ -64,12 +66,17 @@ def select_assets(config: RunConfig, pyramid_format: str, *, limit: int | None =
                 break
             chain[stage] = candidates[-1]
             parent = candidates[-1]["id"]
-        classifier = classifications.get(chain.get("background", {}).get("id", ""), [])
-        if classifier:
-            chain["classify"] = classifier[-1]
-            verifier = verifications.get(classifier[-1]["id"], [])
-            if verifier:
-                chain["verify"] = verifier[-1]
+        background = chain.get("background")
+        classifier = classifications.get(background.get("id", ""), []) if background else []
+        expected_classifier = OllamaClassifier(config).output_id(background) if background else None
+        current_classifier = next((record for record in classifier if record["id"] == expected_classifier), None)
+        if current_classifier:
+            chain["classify"] = current_classifier
+            verifier = verifications.get(current_classifier["id"], [])
+            expected_verifier = OllamaVerifier(config).output_id(current_classifier)
+            current_verifier = next((record for record in verifier if record["id"] == expected_verifier), None)
+            if current_verifier:
+                chain["verify"] = current_verifier
         outputs = {stage: record["id"] for stage, record in chain.items()}
         review = reviews.get(prompt["id"])
         applicable = review is not None and all(

@@ -9,12 +9,15 @@ import numpy as np
 import zstandard
 
 from ansi_scaler.ansi import AnsiCells, decode_ansi, encode_ansi
+from ansi_scaler.config import LodSettings, RunConfig
 from ansi_scaler.dataset.compiler import compile_dataset
 from ansi_scaler.dataset.models import DatasetRecipe
 from ansi_scaler.dataset.reader import CompiledDataset
 from ansi_scaler.dataset.selection import assign_split
 from ansi_scaler.dataset.validate import validate_dataset
 from ansi_scaler.manifests import write_jsonl
+from ansi_scaler.stages.classify import OllamaClassifier
+from ansi_scaler.stages.verify import OllamaVerifier
 
 
 def test_ansi_cells_round_trip_supplementary_glyph_and_transparency() -> None:
@@ -92,11 +95,17 @@ def test_compile_read_and_validate_tiny_dataset(tmp_path: Path) -> None:
             "render_size_px": [460, 460],
         },
     }
-    classification = {**common, "id": "c", "parent_id": "r", "stage": "classify"}
+    config = RunConfig(name="tiny", data_dir=data, lod=LodSettings(levels=[]))
+    classification = {
+        **common,
+        "id": OllamaClassifier(config).output_id(cutout),
+        "parent_id": "r",
+        "stage": "classify",
+    }
     verification = {
         **common,
-        "id": "v",
-        "parent_id": "c",
+        "id": OllamaVerifier(config).output_id(classification),
+        "parent_id": classification["id"],
         "stage": "verify",
         "verification": {"decision": "accept"},
     }
