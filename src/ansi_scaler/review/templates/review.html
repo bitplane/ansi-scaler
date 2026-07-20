@@ -25,7 +25,7 @@
 
   <div class="stage-rail">
     {% for tab in sample.stage_tabs %}
-    <button id="{{ tab.stage }}-stage" class="stage-tab status-{{ tab.status }}{% if tab.selected %} selected{% endif %}"
+    <button id="{% if tab.stage == 'pyramid' %}ansi{% else %}{{ tab.stage }}{% endif %}-stage" class="stage-tab status-{{ tab.status }}{% if tab.selected %} selected{% endif %}"
       data-review-stage="{{ tab.stage }}" data-review-output="{{ tab.output_id or '' }}" data-review-event="{{ tab.event_id }}"
       {% if tab.stage == 'generate' and sample.raster %}data-image="/media/{{ sample.raster.id }}" data-label="Generated raster"{% endif %}
       {% if tab.stage in ('background', 'classify', 'verify') and sample.cutout %}data-image="/media/{{ sample.cutout.id }}" data-label="Background cutout"{% endif %}

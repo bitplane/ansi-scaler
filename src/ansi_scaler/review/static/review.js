@@ -3,7 +3,7 @@
   if (!shell) return;
   const image = document.querySelector('#review-image');
   const imageLabel = document.querySelector('#image-label');
-  const ansiStage = document.querySelector('#ansi-stage');
+  const ansiStage = document.querySelector('[data-review-stage="pyramid"]');
   const ansiView = document.querySelector('#ansi-view');
   const ansiViewport = document.querySelector('#ansi-viewport');
   const ansiTerminal = document.querySelector('#ansi-terminal');
@@ -32,6 +32,7 @@
   let ansiLevel = null;
   let ansiCachePyramid = ansiStage?.dataset.pyramid || null;
   const ansiLevelCache = new Map();
+  let ansiInitialised = false;
   let displayMode = 'fit';
   const cellWidth = 8;
   const cellHeight = 16;
@@ -53,6 +54,16 @@
     ['ul','lc','umr'], ['ul','ll','umr'], ['ul','lc','ur'], ['ur','uc','umr'], ['ur','ul','umr'],
     ['ur','uc','lmr'], ['ur','ul','lmr'], ['ur','uc','lr'], ['ur','uml','lmr'],
   ];
+
+  function storedValue(key, fallback) {
+    try { return localStorage.getItem(key) ?? fallback; }
+    catch (_) { return fallback; }
+  }
+
+  function storeValue(key, value) {
+    try { localStorage.setItem(key, value); }
+    catch (_) { /* Browser storage is an optional convenience. */ }
+  }
 
   function stopPlayback() {
     playing = false;
@@ -85,7 +96,7 @@
     ansiView.classList.toggle('fit-mode', displayMode === 'fit');
     ansiView.classList.toggle('actual-mode', displayMode === 'actual');
     ansiModes.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === displayMode)));
-    localStorage.setItem('ansi-review-display-mode', displayMode);
+    storeValue('ansi-review-display-mode', displayMode);
     requestAnimationFrame(sizeTerminal);
   }
 
@@ -276,7 +287,10 @@
   }
 
   async function drawAnsi(level, request) {
-    await document.fonts.load(`${cellHeight}px "ANSI Symbols"`, '█🮈');
+    await Promise.race([
+      document.fonts.load(`${cellHeight}px "ANSI Symbols"`, '█🮈').catch(() => []),
+      new Promise(resolve => setTimeout(resolve, 1500)),
+    ]);
     if (request !== ansiRequest || request.signal.aborted) return false;
     const ratio = Math.max(1, window.devicePixelRatio || 1);
     const naturalWidth = level.width * cellWidth;
@@ -344,7 +358,7 @@
     }
     const bounded = Math.max(Number(ansiView.dataset.minWidth), Math.min(Number(ansiView.dataset.maxWidth), Number(width)));
     ansiSlider.value = bounded;
-    localStorage.setItem('ansi-review-width', String(bounded));
+    storeValue('ansi-review-width', String(bounded));
     ansiRequest?.abort();
     const request = new AbortController();
     ansiRequest = request;
@@ -381,6 +395,18 @@
 
   function selectAnsi() {
     if (!ansiView) return;
+    if (!ansiInitialised) {
+      const remembered = Number(storedValue('ansi-review-width', '40'));
+      ansiSlider.value = Math.max(
+        Number(ansiView.dataset.minWidth),
+        Math.min(Number(ansiView.dataset.maxWidth), Number.isFinite(remembered) ? remembered : 40),
+      );
+      setDisplayMode(storedValue('ansi-review-display-mode', 'fit'));
+      if (typeof ResizeObserver !== 'undefined' && ansiViewport) {
+        new ResizeObserver(sizeTerminal).observe(ansiViewport);
+      }
+      ansiInitialised = true;
+    }
     stopLodPlayback();
     image?.classList.add('hidden');
     ansiView.classList.remove('hidden');
@@ -431,7 +457,7 @@
     const bounded = Math.max(0, Math.min(lodLevels.length - 1, Number(index)));
     lodSlider.value = bounded;
     const level = lodLevels[bounded];
-    localStorage.setItem('ansi-review-lod-level', String(bounded));
+    storeValue('ansi-review-lod-level', String(bounded));
     image.src = `/media/${document.querySelector('#lod-stage').dataset.reviewOutput}?level=${level.name}`;
     imageLabel.textContent = level.name.toUpperCase();
     lodName.textContent = level.name.toUpperCase();
@@ -560,15 +586,7 @@
   if (initialTarget) selectStage(initialTarget);
 
   if (lodSlider) {
-    const rememberedLod = Number(localStorage.getItem('ansi-review-lod-level') || 0);
-    showLod(rememberedLod);
-  }
-
-  if (ansiView) {
-    const remembered = Number(localStorage.getItem('ansi-review-width') || 40);
-    ansiSlider.value = Math.max(Number(ansiView.dataset.minWidth), Math.min(Number(ansiView.dataset.maxWidth), remembered));
-    setDisplayMode(localStorage.getItem('ansi-review-display-mode') || 'fit');
-    loadAnsi(ansiSlider.value, {stop: false});
-    new ResizeObserver(sizeTerminal).observe(ansiViewport);
+    const rememberedLod = Number(storedValue('ansi-review-lod-level', '0'));
+    showLod(Number.isFinite(rememberedLod) ? rememberedLod : 0);
   }
 })();
