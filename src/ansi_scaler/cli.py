@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from dotenv import load_dotenv
 
 from ansi_scaler.config import RunConfig, load_run_config
 from ansi_scaler.background_trial import run_background_trial
@@ -36,6 +37,7 @@ DatasetRecipeOption = Annotated[Path, typer.Option("--recipe", exists=True, dir_
 
 
 def _config(path: Path) -> RunConfig:
+    load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
     config = load_run_config(path)
     if ollama_host := os.environ.get("OLLAMA_HOST"):
         config.vlm.endpoint = ollama_host

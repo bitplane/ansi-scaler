@@ -18,6 +18,7 @@ dependencies = [
     "protobuf>=6.31",
     "psutil>=7.0",
     "pydantic>=2.11",
+    "python-dotenv>=1.1",
     "pyyaml>=6.0",
     "rembg[gpu]>=2.0.69",
     "safetensors>=0.5",

@@ -331,9 +331,7 @@ def test_review_defaults_to_lod_zero_as_highest_available_visual_stage(tmp_path:
                 "id": "lod-1",
                 "parent_id": "cutout-1",
                 "stage": "lod",
-                "levels": [
-                    {"name": "lod-0", "preview": preview.relative_to(config.data_dir).as_posix()}
-                ],
+                "levels": [{"name": "lod-0", "preview": preview.relative_to(config.data_dir).as_posix()}],
             }
         ],
     )

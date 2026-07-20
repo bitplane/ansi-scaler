@@ -41,6 +41,22 @@ class FakePipeline:
         return SimpleNamespace(images=[Image.new("RGB", (512, 512), "green")])
 
 
+def test_cli_loads_pwd_dotenv_without_overriding_shell_environment(tmp_path: Path, monkeypatch) -> None:
+    run_config = Path("configs/runs/smoke.yaml").resolve()
+    (tmp_path / ".env").write_text("OLLAMA_HOST=http://remote-ollama:11434\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OLLAMA_HOST", "http://shell-ollama:11434")
+
+    shell_config = cli._config(run_config)
+    assert shell_config.vlm.endpoint == "http://shell-ollama:11434"
+    assert shell_config.llm.endpoint == "http://shell-ollama:11434"
+
+    monkeypatch.delenv("OLLAMA_HOST")
+    dotenv_config = cli._config(run_config)
+    assert dotenv_config.vlm.endpoint == "http://remote-ollama:11434"
+    assert dotenv_config.llm.endpoint == "http://remote-ollama:11434"
+
+
 def test_active_lineage_excludes_superseded_rasters_and_backgrounds(tmp_path: Path) -> None:
     config = load_run_config(Path("configs/runs/smoke.yaml"))
     config.data_dir = tmp_path / "data"
