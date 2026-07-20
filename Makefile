@@ -59,19 +59,19 @@ prompts: .venv/.installed  ## Build a deterministic prompt manifest
 generate: deps prompts  ## Refresh prompts, then generate Sana rasters (downloads model; CUDA required)
 	scripts/generate.sh $(RUN_CONFIG)
 
-background: .venv/.installed  ## Extract RGBA subjects with the configured provider
+background: generate  ## Resume through RGBA extraction with the configured provider
 	scripts/background.sh $(RUN_CONFIG)
 
-lod: .venv/.installed  ## Build SVG LODs and PNG previews with VTracer
+lod: background  ## Resume through SVG LODs and PNG previews with VTracer
 	scripts/lod.sh $(RUN_CONFIG)
 
-pyramid: .venv/.installed  ## Build compressed ANSI pyramids with the pinned Chuda Python backend
+pyramid: lod  ## Resume through compressed ANSI pyramids with the pinned Chuda Python backend
 	scripts/pyramid.sh $(RUN_CONFIG)
 
-classify: .venv/.installed  ## Classify cutouts with the configured Ollama VLM
+classify: pyramid  ## Resume through cutout classification with the configured Ollama VLM
 	RETRY_ERRORS=$(RETRY_ERRORS) scripts/classify.sh $(RUN_CONFIG)
 
-verify: .venv/.installed  ## Verify VLM classifications with the configured Ollama LLM
+verify: classify  ## Resume through VLM verification with the configured Ollama LLM
 	RETRY_ERRORS=$(RETRY_ERRORS) scripts/verify.sh $(RUN_CONFIG)
 
 review: .venv/.installed  ## Open the local corpus review and annotation UI
