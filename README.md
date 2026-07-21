@@ -228,3 +228,33 @@ foreground RGB, background RGB, and a background-present bit. Dataset indexes re
 hashes, selection reason, split, review/verifier provenance, bboxes, and prompt metadata. Glyph vocabularies reserve IDs
 0–2 for PAD, MASK, and UNK; a recipe can name an older `vocabulary.json` to preserve every existing ID and append new
 Unicode codepoints deterministically.
+
+## Local refinement experiment
+
+The first model experiment learns an exact local 1.5× operation: an 8×4 ANSI
+context surrounds a central 4×2 core, and the model predicts the aligned 6×3
+representation of that core at the next scale. Training examples are sampled
+from whole pyramids at runtime, balanced across assets, scale pairs, silhouette
+edges, visible interiors, and empty space. Asset-level splits prevent patches
+from the same prompt family leaking between train and evaluation.
+
+Run the short end-to-end check first:
+
+```bash
+make refiner-smoke
+```
+
+This compiles the current accepted dataset if necessary, caches the exact masked
+Sana/Gemma prompt states, unloads the text encoder, and trains a small refiner.
+The first prompt-cache build is model-sized work; subsequent runs reuse its
+content-addressed safetensors cache. Run or resume the full experiment with:
+
+```bash
+make refiner-train
+```
+
+Override the recipe with `TRAINING_CONFIG=path/to/config.yaml`. Runs live under
+`data/training/<name>/<run-id>/` and contain append-only JSONL metrics, an atomic
+resume checkpoint, best safetensors weights, a test contact sheet, and
+`report.json`. The report compares multi-scale rendered MSE against direct
+nearest-neighbour expansion; `beats_nearest` is the initial hypothesis test.

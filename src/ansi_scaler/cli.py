@@ -33,6 +33,7 @@ app.add_typer(prompts_app, name="prompts")
 
 RunConfigOption = Annotated[Path, typer.Option("--run-config", exists=True, dir_okay=False)]
 DatasetRecipeOption = Annotated[Path, typer.Option("--recipe", exists=True, dir_okay=False)]
+TrainingConfigOption = Annotated[Path, typer.Option("--training-config", exists=True, dir_okay=False)]
 
 
 def _config(path: Path) -> RunConfig:
@@ -276,3 +277,13 @@ def dataset_build(
 def dataset_validate(path: Annotated[Path, typer.Option("--dataset-dir", exists=True, file_okay=False)]) -> None:
     """Validate checksums, tensors, offsets, splits, and dimensions."""
     typer.echo(json.dumps(validate_dataset(path), sort_keys=True, indent=2))
+
+
+@app.command("refiner-train")
+def refiner_train(training_config: TrainingConfigOption) -> None:
+    """Train or resume the local 8x4-context ANSI refinement experiment."""
+    from ansi_scaler.refiner.config import load_refiner_config
+    from ansi_scaler.refiner.train import train_refiner
+
+    settings = load_refiner_config(training_config)
+    typer.echo(f"Refiner run: {train_refiner(settings)}")

@@ -141,5 +141,6 @@ def test_compile_read_and_validate_tiny_dataset(tmp_path: Path) -> None:
     loaded = dataset.asset("p").level(2)
     assert loaded.glyph_ids.tolist() == [3, 4]
     assert loaded.background_present.tolist() == [False, True]
+    np.testing.assert_allclose(dataset.asset("p").geometry()["render_bbox"], [0.0, 0.1, 0.9, 1.0])
     assert validate_dataset(destination) == {"assets": 1, "levels": 1, "cells": 2}
     assert compile_dataset(recipe) == destination

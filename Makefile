@@ -1,12 +1,13 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
 	deps content prompts generate background lod pyramid classify verify review corpus smoke gc \
-	dataset-plan dataset dataset-validate
+	dataset-plan dataset dataset-validate refiner-smoke refiner-train
 
 RUN_CONFIG ?= configs/runs/first.yaml
 RETRY_ERRORS ?= 0
 GC_CONFIRM ?= 0
 DATASET_RECIPE ?= configs/datasets/first.yaml
 DATASET_LIMIT ?=
+TRAINING_CONFIG ?= configs/training/refiner-first.yaml
 
 all: dev test lint  ## Prepare the project and run all local checks
 
@@ -46,6 +47,12 @@ dataset: .venv/.installed  ## Compile resumable immutable safetensors dataset sh
 
 dataset-validate: .venv/.installed  ## Validate DATASET_DIR checksums, tensors, and split isolation
 	scripts/dataset-validate.sh
+
+refiner-smoke: .venv/.installed  ## Run the short end-to-end local ANSI refiner experiment
+	.venv/bin/ansi-scaler refiner-train --training-config configs/training/refiner-smoke.yaml
+
+refiner-train: .venv/.installed  ## Train or resume the full local ANSI refiner experiment
+	.venv/bin/ansi-scaler refiner-train --training-config $(TRAINING_CONFIG)
 
 deps: .venv/.installed  ## Check host build tools, Python headers, CUDA, and GPU runtimes
 	scripts/check-deps.sh

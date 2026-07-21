@@ -52,6 +52,15 @@ class CompiledAsset:
                 return level
         raise KeyError(f"Asset {self.record['asset_id']} has no width {width}")
 
+    def geometry(self) -> dict[str, np.ndarray]:
+        shard_path = self.dataset.path / f"shard-{self.record['shard']:05d}.safetensors"
+        with safe_open(shard_path, framework="numpy") as handle:
+            index = self.record["local_index"]
+            return {
+                name: handle.get_tensor(name)[index].copy()
+                for name in ("content_bbox", "render_bbox", "canvas_size", "render_size")
+            }
+
 
 class CompiledDataset:
     def __init__(self, path: Path) -> None:
