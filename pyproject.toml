@@ -12,6 +12,7 @@ dependencies = [
     "fastapi>=0.116",
     "jinja2>=3.1",
     "kornia>=0.8",
+    "mlflow>=3.1,<4",
     "numba>=0.61",
     "numpy>=2.0",
     "pillow>=12.0",

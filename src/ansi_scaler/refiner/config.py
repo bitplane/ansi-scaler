@@ -20,6 +20,8 @@ class RefinerConfig(BaseModel):
     checkpoint_steps: int = Field(default=1_000, ge=1)
     eval_steps: int = Field(default=500, ge=1)
     eval_patches_per_asset: int = Field(default=256, ge=1)
+    mlflow_experiment: str = "ansi-refiner"
+    mlflow_log_steps: int = Field(default=10, ge=1)
     d_model: int = Field(default=256, ge=32)
     heads: int = Field(default=4, ge=1)
     context_layers: int = Field(default=2, ge=1)

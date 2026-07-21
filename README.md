@@ -267,3 +267,15 @@ make refiner-demo OBJECT="wooden treasure chest" WIDTH=40
 
 The newest best checkpoint for `TRAINING_CONFIG` is used automatically. Set
 `CHECKPOINT=/path/to/best.safetensors` to select one explicitly.
+
+Training runs are also recorded in MLflow. Start the local dashboard with:
+
+```bash
+make mlflow
+```
+
+Open `http://127.0.0.1:5000` to compare training loss, validation rendered MSE,
+baseline MSE, accuracy, configuration, dataset identity, and final artifacts.
+The default store is `data/training/mlflow.db`; set `MLFLOW_TRACKING_URI` for a
+shared or remote tracking server. Loss metrics are logged every 10 steps by
+default while the append-only local JSONL log remains per-step.

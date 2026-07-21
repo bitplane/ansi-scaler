@@ -10,6 +10,8 @@ warmup_steps: 20
 checkpoint_steps: 100
 eval_steps: 100
 eval_patches_per_asset: 32
+mlflow_experiment: ansi-refiner
+mlflow_log_steps: 10
 d_model: 128
 heads: 4
 context_layers: 1

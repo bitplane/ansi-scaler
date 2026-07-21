@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from mlflow import MlflowClient
 from types import SimpleNamespace
 
 from ansi_scaler.ansi import AnsiCells
@@ -10,6 +11,7 @@ from ansi_scaler.refiner.config import RefinerConfig
 from ansi_scaler.refiner.inference import _lod_weights, scale_cells
 from ansi_scaler.refiner.model import LocalAnsiRefiner, refiner_loss
 from ansi_scaler.refiner.sampler import AssetPatches, aligned_windows, exact_pairs, extract_patch
+from ansi_scaler.refiner.tracking import RefinerTracker, default_tracking_uri
 
 
 def level(width: int, rows: int) -> CompiledLevel:
@@ -100,3 +102,32 @@ def test_whole_grid_inference_pads_and_crops_arbitrary_dimensions() -> None:
 def test_lod_weights_blend_across_boundaries() -> None:
     np.testing.assert_allclose(_lod_weights(10, (10, 40, 80)), [0.5, 0.5, 0, 0])
     np.testing.assert_allclose(_lod_weights(20, (10, 40, 80)), [0, 1, 0, 0])
+
+
+def test_mlflow_tracker_records_metrics_parameters_and_artifacts(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    artifact = run_dir / "report.json"
+    artifact.write_text("{}\n")
+    tracker = RefinerTracker.start(
+        output_root=tmp_path,
+        experiment="test-refiner",
+        run_dir=run_dir,
+        run_name="test-run",
+        log_steps=10,
+        parameters={"config": {"steps": 20}, "dataset": {"id": "dataset-id"}},
+        tags={"ansi_scaler.run_id": "local-id"},
+    )
+    tracker.metrics({"loss": 2.0}, step=1, prefix="train")
+    tracker.metrics({"loss": 1.0}, step=10, prefix="train")
+    tracker.artifact(artifact)
+    tracker.finish()
+
+    client = MlflowClient(tracking_uri=default_tracking_uri(tmp_path))
+    run = client.get_run(tracker.run_id)
+    history = client.get_metric_history(tracker.run_id, "train/loss")
+    assert run.info.status == "FINISHED"
+    assert run.data.params["config.steps"] == "20"
+    assert [(metric.step, metric.value) for metric in history] == [(10, 1.0)]
+    assert [item.path for item in client.list_artifacts(tracker.run_id)] == ["report.json"]

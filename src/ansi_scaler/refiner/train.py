@@ -19,6 +19,7 @@ from ansi_scaler.identity import stable_id
 from ansi_scaler.refiner.config import RefinerConfig
 from ansi_scaler.refiner.model import LocalAnsiRefiner, RefinerOutput, refiner_loss
 from ansi_scaler.refiner.sampler import Patch, PatchSampler, fixed_patches, load_patch_assets
+from ansi_scaler.refiner.tracking import RefinerTracker
 
 
 def _device(value: str) -> torch.device:
@@ -142,7 +143,7 @@ def _atomic_checkpoint(path: Path, payload: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
-def train_refiner(config: RefinerConfig) -> Path:
+def _train_refiner(config: RefinerConfig) -> Path:
     recipe = load_dataset_recipe(config.dataset_recipe)
     dataset_path = compile_dataset(recipe)
     dataset = CompiledDataset.open(dataset_path)
@@ -162,6 +163,32 @@ def train_refiner(config: RefinerConfig) -> Path:
     (run_dir / "config.json").write_text(json.dumps(config.model_dump(mode="json"), sort_keys=True, indent=2) + "\n")
     device = _device(config.device)
     model = LocalAnsiRefiner(vocabulary_size, config).to(device)
+    parameter_count = sum(parameter.numel() for parameter in model.parameters())
+    tracker = RefinerTracker.start(
+        output_root=config.output_root,
+        experiment=config.mlflow_experiment,
+        run_dir=run_dir,
+        run_name=f"{config.name}-{run_id[:12]}",
+        log_steps=config.mlflow_log_steps,
+        parameters={
+            "config": config.model_dump(mode="json"),
+            "dataset": {
+                "id": dataset.metadata["dataset_id"],
+                "vocabulary_sha256": dataset.metadata["vocabulary_sha256"],
+                "path": str(dataset_path),
+                "train_assets": len(train_assets),
+                "validation_assets": len(validation_assets),
+                "test_assets": len(test_assets),
+            },
+            "model": {"parameters": parameter_count, "vocabulary_size": vocabulary_size},
+            "runtime": {"device": str(device), "torch": torch.__version__},
+        },
+        tags={
+            "ansi_scaler.run_id": run_id,
+            "ansi_scaler.dataset_id": dataset.metadata["dataset_id"],
+            "ansi_scaler.model": "local-ansi-refiner-v2",
+        },
+    )
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer,
@@ -201,11 +228,13 @@ def train_refiner(config: RefinerConfig) -> Path:
         record = {"step": step + 1, "split": "train", "lr": scheduler.get_last_lr()[0], **{key: value.item() for key, value in parts.items()}}
         with metrics_path.open("a") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
+        tracker.metrics({key: value for key, value in record.items() if key not in ("step", "split")}, step=step + 1, prefix="train")
         should_eval = (step + 1) % config.eval_steps == 0 or step + 1 == config.steps
         if should_eval and validation:
             values = evaluate(model, validation, dataset, config, device)
             with metrics_path.open("a") as handle:
                 handle.write(json.dumps({"step": step + 1, "split": "validation", **values}, sort_keys=True) + "\n")
+            tracker.metrics(values, step=step + 1, prefix="validation", force=True)
             if values["render_mse"] < best:
                 best = values["render_mse"]
                 save_file(model.state_dict(), run_dir / "best.safetensors")
@@ -224,4 +253,19 @@ def train_refiner(config: RefinerConfig) -> Path:
         "test": test_values, "beats_nearest": bool(test_values and test_values["render_mse"] < test_values["baseline_render_mse"]),
     }
     (run_dir / "report.json").write_text(json.dumps(report, sort_keys=True, indent=2) + "\n")
+    tracker.metrics(test_values, step=config.steps, prefix="test", force=True)
+    for artifact in (run_dir / "config.json", run_dir / "report.json", run_dir / "test-contact-sheet.png", best_path):
+        tracker.artifact(artifact)
+    tracker.finish()
     return run_dir
+
+
+def train_refiner(config: RefinerConfig) -> Path:
+    try:
+        return _train_refiner(config)
+    except BaseException:
+        import mlflow
+
+        if mlflow.active_run() is not None:
+            mlflow.end_run(status="FAILED")
+        raise

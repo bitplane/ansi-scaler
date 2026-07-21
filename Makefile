@@ -1,6 +1,6 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
 	deps content prompts generate background lod pyramid classify verify review corpus smoke gc \
-	dataset-plan dataset dataset-validate refiner-smoke refiner-train refiner-demo
+	dataset-plan dataset dataset-validate refiner-smoke refiner-train refiner-demo mlflow
 
 RUN_CONFIG ?= configs/runs/first.yaml
 RETRY_ERRORS ?= 0
@@ -59,6 +59,9 @@ refiner-train: .venv/.installed  ## Train or resume the full local ANSI refiner 
 
 refiner-demo: deps  ## Generate OBJECT and compare Chuda WIDTH with learned 1.5x ANSI
 	.venv/bin/ansi-scaler refiner-demo "$(OBJECT)" --width $(WIDTH) --run-config $(RUN_CONFIG) --training-config $(TRAINING_CONFIG) $(if $(CHECKPOINT),--checkpoint $(CHECKPOINT),)
+
+mlflow: .venv/.installed  ## Open the local MLflow experiment dashboard on port 5000
+	scripts/mlflow.sh
 
 deps: .venv/.installed  ## Check host build tools, Python headers, CUDA, and GPU runtimes
 	scripts/check-deps.sh
