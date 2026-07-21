@@ -1,7 +1,6 @@
 name: local-refiner-smoke
 dataset_recipe: configs/datasets/first.yaml
 output_root: data/training
-feature_root: data/features
 seed: 42000
 device: auto
 steps: 200
@@ -15,7 +14,4 @@ d_model: 128
 heads: 4
 context_layers: 1
 decoder_layers: 2
-prompt_features: sana
-prompt_batch_size: 4
-max_prompt_tokens: 300
 train_asset_limit: 4

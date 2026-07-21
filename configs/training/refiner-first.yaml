@@ -1,7 +1,6 @@
 name: local-refiner-first
 dataset_recipe: configs/datasets/first.yaml
 output_root: data/training
-feature_root: data/features
 seed: 42000
 device: auto
 steps: 20000
@@ -17,6 +16,3 @@ heads: 4
 context_layers: 2
 decoder_layers: 4
 dropout: 0.1
-prompt_features: sana
-prompt_batch_size: 4
-max_prompt_tokens: 300

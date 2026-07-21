@@ -18,7 +18,7 @@ class RefinerOutput:
 
 
 class LocalAnsiRefiner(nn.Module):
-    def __init__(self, vocabulary_size: int, prompt_dimension: int, config: RefinerConfig) -> None:
+    def __init__(self, vocabulary_size: int, config: RefinerConfig) -> None:
         super().__init__()
         width = config.d_model
         self.glyph_embedding = nn.Embedding(vocabulary_size, width // 2)
@@ -29,7 +29,6 @@ class LocalAnsiRefiner(nn.Module):
         )
         self.context_encoder = nn.TransformerEncoder(context_layer, config.context_layers, enable_nested_tensor=False)
         self.metadata = nn.Sequential(nn.Linear(16, width), nn.SiLU(), nn.Linear(width, width))
-        self.prompt_projection = nn.Linear(prompt_dimension, width)
         self.output_queries = nn.Parameter(torch.randn(18, width) * 0.02)
         decoder_layer = nn.TransformerDecoderLayer(
             width, config.heads, width * 4, config.dropout, batch_first=True, norm_first=True
@@ -47,8 +46,6 @@ class LocalAnsiRefiner(nn.Module):
         background: torch.Tensor,
         background_present: torch.Tensor,
         metadata: torch.Tensor,
-        prompt: torch.Tensor,
-        prompt_mask: torch.Tensor,
     ) -> RefinerOutput:
         batch = glyphs.shape[0]
         cells = torch.cat(
@@ -56,13 +53,9 @@ class LocalAnsiRefiner(nn.Module):
         )
         context = self.context_encoder(self.cell_projection(cells) + self.context_positions.unsqueeze(0))
         meta = self.metadata(metadata).unsqueeze(1)
-        prompt_tokens = self.prompt_projection(prompt)
-        memory = torch.cat([context, meta, prompt_tokens], dim=1)
-        padding = torch.cat(
-            [torch.zeros((batch, 33), dtype=torch.bool, device=glyphs.device), ~prompt_mask.bool()], dim=1
-        )
+        memory = torch.cat([context, meta], dim=1)
         queries = self.output_queries.unsqueeze(0).expand(batch, -1, -1)
-        decoded = self.decoder(queries, memory, memory_key_padding_mask=padding)
+        decoded = self.decoder(queries, memory)
         return RefinerOutput(
             glyph_logits=self.glyph_head(decoded),
             foreground=torch.sigmoid(self.foreground_head(decoded)),

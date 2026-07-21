@@ -21,7 +21,6 @@ class Window:
 class AssetPatches:
     asset_id: str
     split: str
-    prompt: str
     render_bbox: np.ndarray
     levels: dict[int, CompiledLevel]
     windows: dict[str, list[Window]]
@@ -88,12 +87,10 @@ def load_patch_assets(dataset: CompiledDataset, split: str) -> list[AssetPatches
         windows = aligned_windows(levels, space_id)
         if not any(windows.values()):
             continue
-        metadata = asset.record.get("prompt_metadata", {})
         result.append(
             AssetPatches(
                 asset_id=asset.record["asset_id"],
                 split=split,
-                prompt=metadata.get("prompt", metadata.get("concept_name", "")),
                 render_bbox=asset.geometry()["render_bbox"].astype(np.float32),
                 levels=levels,
                 windows=windows,

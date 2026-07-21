@@ -244,10 +244,9 @@ Run the short end-to-end check first:
 make refiner-smoke
 ```
 
-This compiles the current accepted dataset if necessary, caches the exact masked
-Sana/Gemma prompt states, unloads the text encoder, and trains a small refiner.
-The first prompt-cache build is model-sized work; subsequent runs reuse its
-content-addressed safetensors cache. Run or resume the full experiment with:
+This compiles the current accepted dataset if necessary and trains a small
+visual-only refiner from ANSI context and spatial metadata. Run or resume the
+full experiment with:
 
 ```bash
 make refiner-train

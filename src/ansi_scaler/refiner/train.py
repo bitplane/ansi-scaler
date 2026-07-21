@@ -17,7 +17,6 @@ from ansi_scaler.dataset.models import load_dataset_recipe
 from ansi_scaler.dataset.reader import CompiledDataset
 from ansi_scaler.identity import stable_id
 from ansi_scaler.refiner.config import RefinerConfig
-from ansi_scaler.refiner.features import PromptFeatures, ensure_prompt_features
 from ansi_scaler.refiner.model import LocalAnsiRefiner, RefinerOutput, refiner_loss
 from ansi_scaler.refiner.sampler import Patch, PatchSampler, fixed_patches, load_patch_assets
 
@@ -26,11 +25,10 @@ def _device(value: str) -> torch.device:
     return torch.device("cuda" if value == "auto" and torch.cuda.is_available() else ("cpu" if value == "auto" else value))
 
 
-def _batch(patches: list[Patch], features: PromptFeatures, device: torch.device) -> dict[str, torch.Tensor]:
+def _batch(patches: list[Patch], device: torch.device) -> dict[str, torch.Tensor]:
     def array(name: str) -> np.ndarray:
         return np.stack([getattr(patch, name) for patch in patches])
 
-    prompt, prompt_mask = features.get([patch.asset_id for patch in patches], device)
     metadata = np.concatenate(
         [array("bbox"), array("scale"), array("source_lod_weights"), array("target_lod_weights")], axis=1
     )
@@ -40,8 +38,6 @@ def _batch(patches: list[Patch], features: PromptFeatures, device: torch.device)
         "background": torch.from_numpy(array("context_background").reshape((-1, 32, 3))).float().to(device) / 255,
         "background_present": torch.from_numpy(array("context_background_present").reshape((-1, 32))).float().to(device),
         "metadata": torch.from_numpy(metadata).float().to(device),
-        "prompt": prompt.float(),
-        "prompt_mask": prompt_mask,
         "target_glyphs": torch.from_numpy(array("target_glyphs").reshape((-1, 18))).long().to(device),
         "target_foreground": torch.from_numpy(array("target_foreground").reshape((-1, 18, 3))).float().to(device) / 255,
         "target_background": torch.from_numpy(array("target_background").reshape((-1, 18, 3))).float().to(device) / 255,
@@ -50,7 +46,7 @@ def _batch(patches: list[Patch], features: PromptFeatures, device: torch.device)
 
 
 def _forward(model: LocalAnsiRefiner, batch: dict[str, torch.Tensor]) -> RefinerOutput:
-    return model(*(batch[name] for name in ("glyphs", "foreground", "background", "background_present", "metadata", "prompt", "prompt_mask")))
+    return model(*(batch[name] for name in ("glyphs", "foreground", "background", "background_present", "metadata")))
 
 
 def _nearest(patches: list[Patch]) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -85,7 +81,7 @@ def _render(glyphs: np.ndarray, foreground: np.ndarray, background: np.ndarray, 
 
 
 def evaluate(
-    model: LocalAnsiRefiner, patches: list[Patch], features: PromptFeatures, dataset: CompiledDataset,
+    model: LocalAnsiRefiner, patches: list[Patch], dataset: CompiledDataset,
     config: RefinerConfig, device: torch.device, *, contact_path: Path | None = None,
 ) -> dict[str, float]:
     if not patches:
@@ -99,7 +95,7 @@ def evaluate(
     with torch.inference_mode():
         for start in range(0, len(patches), config.batch_size):
             chunk = patches[start : start + config.batch_size]
-            batch = _batch(chunk, features, device)
+            batch = _batch(chunk, device)
             output = _forward(model, batch)
             glyphs = output.glyph_logits.argmax(-1).cpu().numpy().reshape((-1, 3, 6))
             foreground = (output.foreground.cpu().numpy().reshape((-1, 3, 6, 3)) * 255).round().astype(np.uint8)
@@ -150,7 +146,6 @@ def train_refiner(config: RefinerConfig) -> Path:
     recipe = load_dataset_recipe(config.dataset_recipe)
     dataset_path = compile_dataset(recipe)
     dataset = CompiledDataset.open(dataset_path)
-    features = ensure_prompt_features(dataset, config)
     vocabulary_size = len(dataset.vocabulary["codepoints"]) + 3
     space_id = dataset.vocabulary["codepoints"].index(ord(" ")) + 3
     train_assets = load_patch_assets(dataset, "train")
@@ -161,12 +156,12 @@ def train_refiner(config: RefinerConfig) -> Path:
     sampler = PatchSampler(train_assets, config.seed)
     validation = fixed_patches(validation_assets, config.eval_patches_per_asset, config.seed + 1)
     test = fixed_patches(test_assets, config.eval_patches_per_asset, config.seed + 2)
-    run_id = stable_id("local-ansi-refiner-v1", config.model_dump(mode="json"), dataset.metadata["dataset_id"], features.index["feature_id"])
+    run_id = stable_id("local-ansi-refiner-v2", config.model_dump(mode="json"), dataset.metadata["dataset_id"])
     run_dir = config.output_root / config.name / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "config.json").write_text(json.dumps(config.model_dump(mode="json"), sort_keys=True, indent=2) + "\n")
     device = _device(config.device)
-    model = LocalAnsiRefiner(vocabulary_size, features.dimension, config).to(device)
+    model = LocalAnsiRefiner(vocabulary_size, config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer,
@@ -188,7 +183,7 @@ def train_refiner(config: RefinerConfig) -> Path:
     progress = tqdm(range(start, config.steps), desc="train refiner", unit="step", dynamic_ncols=True)
     for step in progress:
         model.train()
-        batch = _batch([sampler.sample() for _ in range(config.batch_size)], features, device)
+        batch = _batch([sampler.sample() for _ in range(config.batch_size)], device)
         optimizer.zero_grad(set_to_none=True)
         amp = device.type == "cuda"
         dtype = torch.bfloat16 if amp and torch.cuda.is_bf16_supported() else torch.float16
@@ -208,7 +203,7 @@ def train_refiner(config: RefinerConfig) -> Path:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
         should_eval = (step + 1) % config.eval_steps == 0 or step + 1 == config.steps
         if should_eval and validation:
-            values = evaluate(model, validation, features, dataset, config, device)
+            values = evaluate(model, validation, dataset, config, device)
             with metrics_path.open("a") as handle:
                 handle.write(json.dumps({"step": step + 1, "split": "validation", **values}, sort_keys=True) + "\n")
             if values["render_mse"] < best:
@@ -223,7 +218,7 @@ def train_refiner(config: RefinerConfig) -> Path:
     best_path = run_dir / "best.safetensors"
     if best_path.exists():
         model.load_state_dict(load_file(best_path, device=str(device)))
-    test_values = evaluate(model, test, features, dataset, config, device, contact_path=run_dir / "test-contact-sheet.png")
+    test_values = evaluate(model, test, dataset, config, device, contact_path=run_dir / "test-contact-sheet.png")
     report = {
         "run_id": run_id, "dataset": str(dataset_path), "assets": {"train": len(train_assets), "validation": len(validation_assets), "test": len(test_assets)},
         "test": test_values, "beats_nearest": bool(test_values and test_values["render_mse"] < test_values["baseline_render_mse"]),

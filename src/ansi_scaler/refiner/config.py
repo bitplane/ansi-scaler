@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
-
 from pydantic import BaseModel, Field, model_validator
 
 from ansi_scaler.config import load_yaml
@@ -12,7 +10,6 @@ class RefinerConfig(BaseModel):
     name: str
     dataset_recipe: Path
     output_root: Path = Path("data/training")
-    feature_root: Path = Path("data/features")
     seed: int = 42000
     device: str = "auto"
     steps: int = Field(default=20_000, ge=1)
@@ -32,9 +29,6 @@ class RefinerConfig(BaseModel):
     foreground_loss_weight: float = Field(default=2.0, ge=0)
     background_loss_weight: float = Field(default=2.0, ge=0)
     presence_loss_weight: float = Field(default=0.5, ge=0)
-    prompt_features: Literal["sana", "fake"] = "sana"
-    prompt_batch_size: int = Field(default=4, ge=1)
-    max_prompt_tokens: int = Field(default=300, ge=1)
     train_asset_limit: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")

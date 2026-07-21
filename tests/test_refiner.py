@@ -5,7 +5,6 @@ import torch
 
 from ansi_scaler.dataset.reader import CompiledLevel
 from ansi_scaler.refiner.config import RefinerConfig
-from ansi_scaler.refiner.features import _fake_features
 from ansi_scaler.refiner.model import LocalAnsiRefiner, refiner_loss
 from ansi_scaler.refiner.sampler import AssetPatches, aligned_windows, exact_pairs, extract_patch
 
@@ -30,7 +29,7 @@ def test_exact_aligned_patch_has_context_target_and_original_bbox() -> None:
     windows = aligned_windows(levels, space_id=3)
     window = next(value for values in windows.values() for value in values if value.x == 2 and value.y == 2)
     asset = AssetPatches(
-        asset_id="asset", split="train", prompt="thing",
+        asset_id="asset", split="train",
         render_bbox=np.asarray([0.1, 0.2, 0.9, 0.8], dtype=np.float32),
         levels=levels, windows=windows,
     )
@@ -44,10 +43,10 @@ def test_exact_aligned_patch_has_context_target_and_original_bbox() -> None:
 
 def test_refiner_forward_and_masked_loss_backpropagate() -> None:
     config = RefinerConfig(
-        name="test", dataset_recipe="dataset.yaml", prompt_features="fake",
+        name="test", dataset_recipe="dataset.yaml",
         d_model=32, heads=4, context_layers=1, decoder_layers=1,
     )
-    model = LocalAnsiRefiner(vocabulary_size=8, prompt_dimension=64, config=config)
+    model = LocalAnsiRefiner(vocabulary_size=8, config=config)
     batch = 2
     output = model(
         torch.randint(3, 8, (batch, 32)),
@@ -55,8 +54,6 @@ def test_refiner_forward_and_masked_loss_backpropagate() -> None:
         torch.rand(batch, 32, 3),
         torch.randint(0, 2, (batch, 32)).float(),
         torch.rand(batch, 16),
-        torch.rand(batch, 5, 64),
-        torch.ones(batch, 5, dtype=torch.bool),
     )
     target_glyphs = torch.randint(3, 8, (batch, 18))
     loss, parts = refiner_loss(
@@ -69,11 +66,3 @@ def test_refiner_forward_and_masked_loss_backpropagate() -> None:
     assert output.foreground.shape == (batch, 18, 3)
     assert set(parts) == {"loss", "glyph", "foreground", "background", "presence"}
     assert torch.isfinite(loss)
-
-
-def test_fake_prompt_features_are_stable_and_masked() -> None:
-    first, masks = _fake_features(["wolf", "knight"], 7)
-    second, _ = _fake_features(["wolf", "knight"], 7)
-    torch.testing.assert_close(first, second)
-    assert first.shape == (2, 7, 64)
-    assert masks.all()
