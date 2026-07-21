@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from types import SimpleNamespace
 
+from ansi_scaler.ansi import AnsiCells
 from ansi_scaler.dataset.reader import CompiledLevel
 from ansi_scaler.refiner.config import RefinerConfig
+from ansi_scaler.refiner.inference import _lod_weights, scale_cells
 from ansi_scaler.refiner.model import LocalAnsiRefiner, refiner_loss
 from ansi_scaler.refiner.sampler import AssetPatches, aligned_windows, exact_pairs, extract_patch
 
@@ -66,3 +69,34 @@ def test_refiner_forward_and_masked_loss_backpropagate() -> None:
     assert output.foreground.shape == (batch, 18, 3)
     assert set(parts) == {"loss", "glyph", "foreground", "background", "presence"}
     assert torch.isfinite(loss)
+
+
+def test_whole_grid_inference_pads_and_crops_arbitrary_dimensions() -> None:
+    config = RefinerConfig(
+        name="test", dataset_recipe="dataset.yaml",
+        d_model=32, heads=4, context_layers=1, decoder_layers=1,
+    )
+    vocabulary = {"codepoints": [ord(" "), ord("#")]}
+    dataset = SimpleNamespace(vocabulary=vocabulary)
+    model = LocalAnsiRefiner(vocabulary_size=5, config=config)
+    width, rows = 5, 3
+    cells = AnsiCells(
+        glyphs=np.full(width * rows, ord("#"), dtype=np.uint32),
+        foreground_rgb=np.full((width * rows, 3), 200, dtype=np.uint8),
+        background_rgb=np.zeros((width * rows, 3), dtype=np.uint8),
+        background_present=np.zeros(width * rows, dtype=np.bool_),
+    )
+
+    enlarged, enlarged_width, enlarged_rows = scale_cells(
+        cells, width=width, rows=rows, model=model, dataset=dataset, config=config,
+        lod_boundaries=(10, 40, 80), device=torch.device("cpu"),
+    )
+
+    assert (enlarged_width, enlarged_rows) == (8, 5)
+    assert enlarged.glyphs.shape == (40,)
+    assert enlarged.foreground_rgb.shape == (40, 3)
+
+
+def test_lod_weights_blend_across_boundaries() -> None:
+    np.testing.assert_allclose(_lod_weights(10, (10, 40, 80)), [0.5, 0.5, 0, 0])
+    np.testing.assert_allclose(_lod_weights(20, (10, 40, 80)), [0, 1, 0, 0])

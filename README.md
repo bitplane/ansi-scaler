@@ -257,3 +257,13 @@ Override the recipe with `TRAINING_CONFIG=path/to/config.yaml`. Runs live under
 resume checkpoint, best safetensors weights, a test contact sheet, and
 `report.json`. The report compares multi-scale rendered MSE against direct
 nearest-neighbour expansion; `beats_nearest` is the initial hypothesis test.
+
+After training, generate a fresh object and print both its direct Chuda render
+and the learned 1.5× enlargement to the terminal:
+
+```bash
+make refiner-demo OBJECT="wooden treasure chest" WIDTH=40
+```
+
+The newest best checkpoint for `TRAINING_CONFIG` is used automatically. Set
+`CHECKPOINT=/path/to/best.safetensors` to select one explicitly.

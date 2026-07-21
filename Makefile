@@ -1,6 +1,6 @@
 .PHONY: help all install dev lock upgrade test coverage lint format clean \
 	deps content prompts generate background lod pyramid classify verify review corpus smoke gc \
-	dataset-plan dataset dataset-validate refiner-smoke refiner-train
+	dataset-plan dataset dataset-validate refiner-smoke refiner-train refiner-demo
 
 RUN_CONFIG ?= configs/runs/first.yaml
 RETRY_ERRORS ?= 0
@@ -8,6 +8,9 @@ GC_CONFIRM ?= 0
 DATASET_RECIPE ?= configs/datasets/first.yaml
 DATASET_LIMIT ?=
 TRAINING_CONFIG ?= configs/training/refiner-first.yaml
+OBJECT ?= wooden treasure chest
+WIDTH ?= 40
+CHECKPOINT ?=
 
 all: dev test lint  ## Prepare the project and run all local checks
 
@@ -53,6 +56,9 @@ refiner-smoke: .venv/.installed  ## Run the short end-to-end local ANSI refiner 
 
 refiner-train: .venv/.installed  ## Train or resume the full local ANSI refiner experiment
 	.venv/bin/ansi-scaler refiner-train --training-config $(TRAINING_CONFIG)
+
+refiner-demo: deps  ## Generate OBJECT and compare Chuda WIDTH with learned 1.5x ANSI
+	.venv/bin/ansi-scaler refiner-demo "$(OBJECT)" --width $(WIDTH) --run-config $(RUN_CONFIG) --training-config $(TRAINING_CONFIG) $(if $(CHECKPOINT),--checkpoint $(CHECKPOINT),)
 
 deps: .venv/.installed  ## Check host build tools, Python headers, CUDA, and GPU runtimes
 	scripts/check-deps.sh

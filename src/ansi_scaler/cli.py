@@ -13,8 +13,10 @@ from ansi_scaler.config import RunConfig, load_run_config
 from ansi_scaler.content import load_content
 from ansi_scaler.dataset.compiler import compile_dataset, plan_dataset
 from ansi_scaler.dataset.models import load_dataset_recipe
+from ansi_scaler.dataset.reader import CompiledDataset
 from ansi_scaler.dataset.validate import validate_dataset
 from ansi_scaler.gc import apply_gc_plan, build_gc_plan, plan_report
+from ansi_scaler.identity import stable_id
 from ansi_scaler.locking import CorpusBusyError, corpus_lock
 from ansi_scaler.prompts import write_prompt_manifest
 from ansi_scaler.stages.classify import run_classify
@@ -287,3 +289,75 @@ def refiner_train(training_config: TrainingConfigOption) -> None:
 
     settings = load_refiner_config(training_config)
     typer.echo(f"Refiner run: {train_refiner(settings)}")
+
+
+@app.command("refiner-demo")
+def refiner_demo(
+    object_name: Annotated[str, typer.Argument(help="Object to generate")],
+    run_config: RunConfigOption,
+    training_config: TrainingConfigOption,
+    width: Annotated[int, typer.Option(min=4)] = 40,
+    checkpoint: Annotated[Path | None, typer.Option(exists=True, dir_okay=False)] = None,
+    seed: int = 42000,
+) -> None:
+    """Generate an object and print its Chuda and learned 1.5x ANSI forms."""
+    import chuda
+    import torch
+
+    from ansi_scaler.ansi import decode_ansi, encode_ansi
+    from ansi_scaler.refiner.config import load_refiner_config
+    from ansi_scaler.refiner.inference import load_refiner, scale_cells
+    from ansi_scaler.stages.generate import SanaGenerator
+
+    config = _config(run_config)
+    training = load_refiner_config(training_config)
+    dataset = CompiledDataset.open(compile_dataset(load_dataset_recipe(training.dataset_recipe)))
+    if checkpoint is None:
+        candidates = list((training.output_root / training.name).glob("*/best.safetensors"))
+        if not candidates:
+            raise typer.BadParameter("No best.safetensors found; pass --checkpoint explicitly")
+        checkpoint = max(candidates, key=lambda path: path.stat().st_mtime)
+
+    prompt = f"{object_name.rstrip(' ,')}, {config.sana.presentation_prompt}"
+    source = {
+        "id": stable_id("refiner-demo", prompt, seed),
+        "prompt": prompt,
+        "negative_prompt": ", ".join(config.sana.exclusions),
+        "seed": seed,
+    }
+    generator = SanaGenerator(config)
+    try:
+        generated = generator(source)
+    finally:
+        generator.close()
+    image_path = config.data_dir / generated["artifact"]
+    renderer = chuda.Renderer(config.chuda.backend, config.chuda.max_batch_cells)
+    frame = renderer.render(
+        chuda.Image.open(image_path), width, config.chuda.font_ratio, config.chuda.transparent_threshold
+    )
+    original_data = frame.to_ansi()
+    original = decode_ansi(original_data, width=frame.columns, rows=frame.rows)
+    device = torch.device(
+        "cuda" if training.device == "auto" and torch.cuda.is_available()
+        else "cpu" if training.device == "auto"
+        else training.device
+    )
+    model = load_refiner(checkpoint, dataset, training, device)
+    enlarged, enlarged_width, enlarged_rows = scale_cells(
+        original,
+        width=frame.columns,
+        rows=frame.rows,
+        model=model,
+        dataset=dataset,
+        config=training,
+        lod_boundaries=(config.chuda.lod_3_below, config.chuda.lod_2_below, config.chuda.lod_1_below),
+        device=device,
+    )
+    typer.echo(f"Generated raster: {image_path}")
+    typer.echo(f"Checkpoint: {checkpoint}")
+    typer.echo(f"\n--- Chuda {frame.columns}x{frame.rows} ---")
+    sys.stdout.flush()
+    sys.stdout.buffer.write(original_data)
+    typer.echo(f"\n--- Refiner {enlarged_width}x{enlarged_rows} ---")
+    sys.stdout.flush()
+    sys.stdout.buffer.write(encode_ansi(enlarged, width=enlarged_width, rows=enlarged_rows))

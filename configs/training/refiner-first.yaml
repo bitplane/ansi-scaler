@@ -3,7 +3,7 @@ dataset_recipe: configs/datasets/first.yaml
 output_root: data/training
 seed: 42000
 device: auto
-steps: 20000
+steps: 100000
 batch_size: 256
 learning_rate: 0.0003
 weight_decay: 0.01
