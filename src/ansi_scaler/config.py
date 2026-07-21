@@ -105,7 +105,7 @@ class ResourceSettings(BaseModel):
 class VlmSettings(BaseModel):
     model: str = "qwen3-vl:8b"
     endpoint: str = "http://127.0.0.1:11434"
-    prompt_version: str = "cutout-classifier-v2"
+    prompt_version: str = "cutout-classifier-v3"
     temperature: float = Field(default=0.0, ge=0.0)
     num_predict: int = Field(default=4096, ge=1)
     timeout_seconds: int = Field(default=300, ge=1)
@@ -118,7 +118,7 @@ class VlmSettings(BaseModel):
 class LlmSettings(BaseModel):
     model: str = "qwen3:8b"
     endpoint: str = "http://127.0.0.1:11434"
-    prompt_version: str = "corpus-verifier-v4"
+    prompt_version: str = "corpus-verifier-v5"
     temperature: float = Field(default=0.0, ge=0.0)
     num_predict: int = Field(default=256, ge=1)
     timeout_seconds: int = Field(default=300, ge=1)

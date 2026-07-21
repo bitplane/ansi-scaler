@@ -39,7 +39,7 @@ background:
 vlm:
   model: qwen3-vl:8b
   endpoint: http://127.0.0.1:11434
-  prompt_version: cutout-classifier-v2
+  prompt_version: cutout-classifier-v3
   temperature: 0.0
   num_predict: 4096
   timeout_seconds: 300
@@ -50,7 +50,7 @@ vlm:
 llm:
   model: qwen3:8b
   endpoint: http://127.0.0.1:11434
-  prompt_version: corpus-verifier-v4
+  prompt_version: corpus-verifier-v5
   temperature: 0.0
   num_predict: 256
   timeout_seconds: 300

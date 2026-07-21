@@ -78,7 +78,9 @@
           <div class="facts">
             {% if observation.candidate_assets is defined %}
               <span>{{ observation.candidate_assets|length }} candidate{% if observation.candidate_assets|length != 1 %}s{% endif %}</span>
-              <span>{{ observation.confidence }} confidence</span>
+              <span>{{ observation.identity_confidence or observation.confidence }} confidence</span>
+              {% if observation.composition is defined %}<span>{{ observation.composition|replace('_', ' ') }}</span>{% endif %}
+              {% if observation.cutout_integrity is defined %}<span>cutout {{ observation.cutout_integrity }}</span>{% endif %}
             {% else %}
               <span>{{ observation.object_count }} object{% if observation.object_count != 1 %}s{% endif %}</span>
               <span>{{ (observation.uncertainty * 100)|round|int }}% uncertainty</span>

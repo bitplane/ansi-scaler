@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from PIL import Image
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ansi_scaler.active import active_backgrounds
 from ansi_scaler.config import RunConfig
@@ -19,7 +19,7 @@ from ansi_scaler.runner import run_stage
 from ansi_scaler.stages.ollama import OllamaStructuredOutputError, RequestFunction, request_with_retry
 
 
-CLASSIFIER_PROMPT = """You are a factual visual observer for isolated game-art cutouts.
+CLASSIFIER_PROMPT = """You are a factual visual observer for isolated, stylized game-art cutouts.
 Describe only what is visibly present. Do not infer the requested prompt and do not decide whether the asset should be
 accepted. The gray checkerboard is the viewer's visualization of transparent pixels: never describe it as an image
 background, residual background, or artefact. Refer to it only as transparency when that fact matters.
@@ -27,32 +27,23 @@ background, residual background, or artefact. Refer to it only as transparency w
 A candidate asset is an independent alternative, duplicate, or sprite-sheet item. Held, mounted, attached, decorative,
 or supporting parts belong in components and are not additional candidate assets. For example, a knight and held shield,
 armour on a display stand, a drone with a mounted camera, grouped mushrooms, and a rock with attached moss are each one
-candidate asset. List visible problems only; do not add boilerplate claims that text, damage, or other problems are absent.
+candidate asset.
+
+The four assessments are closed factual observations, not invitations to find a flaw. Most valid assets should be
+single_asset, coherent, clean, and none. Use those normal values unless there is clear visible evidence otherwise, and
+leave their evidence fields null. Stylization, simplified geometry, invisible fasteners, omitted realistic details,
+asymmetry, highlights, dark shading, decorative cracks, and parts merely touching or overlapping are not damage. Mark
+visual coherence as incoherent only for unmistakably impossible merged or disconnected geometry. Mark cutout integrity
+as damaged only for clearly clipped subject matter, transparent holes through an obviously solid region, a visible halo,
+residual background, or a genuinely separate stray fragment. Transparency surrounding the subject is clean. Do not call
+symbols, decoration, windows, buttons, or texture visible text unless readable letters or numbers are actually present.
+
 Keep primary_subject as a short noun phrase. Put orientation, placement, pose, and part relationships in
-spatial_description. Use low confidence and ambiguities when identification is genuinely unclear.
+spatial_description. Use uncertain only when the pixels genuinely do not support a factual choice. Evidence must describe
+the directly visible fact that caused a non-normal assessment; never speculate about function, realism, or missing detail.
 
 Return JSON matching this schema exactly:
 {schema}"""
-
-
-IssueKind = Literal[
-    "incoherent_geometry",
-    "missing_or_damaged_parts",
-    "residual_background",
-    "halo",
-    "stray_fragment",
-    "extraneous_object",
-    "visible_text",
-    "watermark",
-    "cropped",
-    "mostly_transparent",
-    "unrecognizable",
-]
-
-
-class IssueObservation(BaseModel):
-    kind: IssueKind
-    evidence: str = Field(min_length=1)
 
 
 class Classification(BaseModel):
@@ -61,9 +52,35 @@ class Classification(BaseModel):
     candidate_assets: list[str] = Field(min_length=1)
     components: list[str]
     spatial_description: str = Field(min_length=1)
-    issues: list[IssueObservation]
-    confidence: Literal["high", "medium", "low"]
-    ambiguities: list[str]
+    identity_confidence: Literal["high", "medium", "low"]
+    identity_ambiguity: str | None
+    composition: Literal["single_asset", "multiple_assets", "uncertain"]
+    composition_evidence: str | None
+    visual_coherence: Literal["coherent", "incoherent", "uncertain"]
+    coherence_evidence: str | None
+    cutout_integrity: Literal["clean", "damaged", "uncertain"]
+    cutout_evidence: str | None
+    visible_text: Literal["none", "present", "uncertain"]
+    text_evidence: str | None
+
+    @model_validator(mode="after")
+    def evidence_matches_assessments(self) -> Classification:
+        assessments = (
+            (self.composition, "single_asset", self.composition_evidence, "composition_evidence"),
+            (self.visual_coherence, "coherent", self.coherence_evidence, "coherence_evidence"),
+            (self.cutout_integrity, "clean", self.cutout_evidence, "cutout_evidence"),
+            (self.visible_text, "none", self.text_evidence, "text_evidence"),
+        )
+        for value, normal, evidence, field in assessments:
+            if value == normal and evidence is not None:
+                raise ValueError(f"{field} must be null when assessment is {normal}")
+            if value != normal and not evidence:
+                raise ValueError(f"{field} is required when assessment is {value}")
+        if self.identity_confidence == "high" and self.identity_ambiguity is not None:
+            raise ValueError("identity_ambiguity must be null with high identity confidence")
+        if self.identity_confidence == "low" and not self.identity_ambiguity:
+            raise ValueError("identity_ambiguity is required with low identity confidence")
+        return self
 
 
 class OllamaClassifier:

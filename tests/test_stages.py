@@ -37,6 +37,58 @@ from ansi_scaler.stages.verify import run_verify
 from ansi_scaler.runner import StageInfrastructureError
 
 
+def test_classifier_contract_represents_a_clean_asset_without_invented_issues() -> None:
+    value = Classification(
+        primary_subject="treasure chest",
+        description="A wooden chest with metal bands.",
+        candidate_assets=["treasure chest"],
+        components=["lid", "lock", "metal bands"],
+        spatial_description="Centered in three-quarter view.",
+        identity_confidence="high",
+        identity_ambiguity=None,
+        composition="single_asset",
+        composition_evidence=None,
+        visual_coherence="coherent",
+        coherence_evidence=None,
+        cutout_integrity="clean",
+        cutout_evidence=None,
+        visible_text="none",
+        text_evidence=None,
+    )
+
+    assert value.composition == "single_asset"
+    assert value.cutout_integrity == "clean"
+    assert "issues" not in value.model_dump()
+    assert "ambiguities" not in value.model_dump()
+
+
+def test_classifier_contract_requires_evidence_only_for_non_normal_assessments() -> None:
+    values = {
+        "primary_subject": "object",
+        "description": "An object.",
+        "candidate_assets": ["object"],
+        "components": [],
+        "spatial_description": "Centered.",
+        "identity_confidence": "high",
+        "identity_ambiguity": None,
+        "composition": "single_asset",
+        "composition_evidence": None,
+        "visual_coherence": "coherent",
+        "coherence_evidence": None,
+        "cutout_integrity": "damaged",
+        "cutout_evidence": None,
+        "visible_text": "none",
+        "text_evidence": None,
+    }
+    with pytest.raises(ValueError, match="cutout_evidence is required"):
+        Classification.model_validate(values)
+
+    values["cutout_integrity"] = "clean"
+    values["cutout_evidence"] = "A speculative defect."
+    with pytest.raises(ValueError, match="cutout_evidence must be null"):
+        Classification.model_validate(values)
+
+
 class FakePipeline:
     def __call__(self, **_: object) -> SimpleNamespace:
         return SimpleNamespace(images=[Image.new("RGB", (512, 512), "green")])
@@ -158,7 +210,11 @@ def test_fake_end_to_end_stages(tmp_path: Path) -> None:
                 "content": """{"primary_subject":"object","description":"a green object",
                 "candidate_assets":["green object","alternate object"],"components":[],
                 "spatial_description":"centered",
-                "issues":[],"confidence":"high","ambiguities":[]}"""
+                "identity_confidence":"high","identity_ambiguity":null,
+                "composition":"multiple_assets","composition_evidence":"Two alternatives are visible.",
+                "visual_coherence":"coherent","coherence_evidence":null,
+                "cutout_integrity":"clean","cutout_evidence":null,
+                "visible_text":"none","text_evidence":null}"""
             },
             "eval_duration": 1,
             "total_duration": 2,
@@ -267,9 +323,16 @@ def test_classify_continues_after_ollama_retries_are_exhausted(tmp_path: Path) -
                     candidate_assets=["object"],
                     components=[],
                     spatial_description="centered",
-                    issues=[],
-                    confidence="high",
-                    ambiguities=[],
+                    identity_confidence="high",
+                    identity_ambiguity=None,
+                    composition="single_asset",
+                    composition_evidence=None,
+                    visual_coherence="coherent",
+                    coherence_evidence=None,
+                    cutout_integrity="clean",
+                    cutout_evidence=None,
+                    visible_text="none",
+                    text_evidence=None,
                 ).model_dump_json()
             }
         }

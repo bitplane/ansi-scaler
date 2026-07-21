@@ -22,7 +22,7 @@ equipment, components, and artistic interpretation. Synonyms and visible held, m
 can satisfy the subject. Never invent requirements that are absent from the short subject title.
 
 The input contains structured visual facts only. Transparency is intentional and must never be treated as a background
-mismatch, incomplete rendering, or cutout damage unless the issue list explicitly reports visible damage. Reject only a
+mismatch, incomplete rendering, or cutout damage unless cutout_integrity explicitly reports damage. Reject only a
 clear wrong subject, genuinely separate candidate alternatives, visibly incoherent generation, or an explicit cutout issue
 that makes the asset unusable. Attribute wrong content or incoherent source imagery to generate; attribute explicit missing
 regions, halos, residual backgrounds, stray cutout fragments, or excessive transparency to background. If the structured
@@ -90,14 +90,16 @@ class OllamaVerifier:
             "primary_object",
             "candidate_assets",
             "components",
-            "issues",
-            "artifact_flags",
-            "object_count",
-            "multiple_candidate_assets",
-            "visually_coherent",
-            "confidence",
-            "uncertainty",
-            "ambiguities",
+            "identity_confidence",
+            "identity_ambiguity",
+            "composition",
+            "composition_evidence",
+            "visual_coherence",
+            "coherence_evidence",
+            "cutout_integrity",
+            "cutout_evidence",
+            "visible_text",
+            "text_evidence",
         )
         evidence = {
             "catalogue": {
